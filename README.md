@@ -20,19 +20,21 @@ lacks direct file access to the paths you're browsing (e.g. with root via `su`).
 
 ## Install
 
-Option A — from the release zip:
+1. Unpack the release zip somewhere permanent, e.g.
+   `~/Library/Application Support/doublecmd/plugins/wfx/adbfsplugin/`
+   (the directory Double Commander's own installer uses).
+2. In Double Commander: **Configuration → Options… → Plugins →
+   File System Plugins (WFX) → Add** — select `adbfsplugin.wfx` — **Apply**.
+3. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
+   the new **Android** entry.
 
-1. In Double Commander, open the `adbfsplugin-*-macos.zip` archive and press
-   Enter on it; confirm the plugin-install prompt.
-
-Option B — manual:
-
-1. Unpack the zip somewhere permanent.
-2. Double Commander → Configuration → Options → Plugins → File System Plugins
-   (WFX) → Add… → select `adbfsplugin.wfx`.
-
-Then open the file-system-plugins root (the `wfx://` panel / network drive
-button) and enter **Android**.
+> Note: unlike Total Commander, Double Commander (verified against the 1.2.8
+> sources) does **not** offer to install a plugin when you open its zip in the
+> file panel. Its archive-install code path (`InstallPlugin`) is only reachable
+> through the internal command `cm_AddPlugin <path-to-zip>`, which is not bound
+> to any menu or hotkey by default (and its no-argument file dialog does not
+> accept archives). The zip keeps `pluginst.inf` for Total Commander
+> compatibility and for `cm_AddPlugin` if you bind it yourself.
 
 ## Environment knobs
 
