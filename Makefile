@@ -23,8 +23,14 @@ $(BUILD)/unit_tests: $(UNIT_SRCS) tests/harness.h $(HDRS) | $(BUILD)
 $(BUILD)/dlopen_test: tests/test_dlopen.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_dlopen.cpp
 
-test: $(BUILD)/unit_tests $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
+INTEG_SRCS := tests/test_integration.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
+
+$(BUILD)/integration_tests: $(INTEG_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(INTEG_SRCS)
+
+test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 	$(BUILD)/unit_tests
+	$(BUILD)/integration_tests
 	$(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 
 clean:
