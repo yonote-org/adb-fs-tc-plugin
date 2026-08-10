@@ -20,6 +20,11 @@ lacks direct file access to the paths you're browsing (e.g. with root via `su`).
 
 ## Install
 
+0. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
+   `…-x86_64.zip` for Intel (`uname -m` tells you which). The plugin is
+   shipped as a thin single-architecture binary on purpose — Double
+   Commander's plugin check rejects universal (fat) binaries as
+   "This is not a valid plugin!".
 1. Unpack the release zip somewhere permanent, e.g.
    `~/Library/Application Support/doublecmd/plugins/wfx/adbfsplugin/`
    (the directory Double Commander's own installer uses).
@@ -49,8 +54,7 @@ lacks direct file access to the paths you're browsing (e.g. with root via `su`).
 ```sh
 make            # build/adbfsplugin.wfx (native arch)
 make test       # unit + integration + dlopen loadability tests
-make universal  # arm64 + x86_64 dylib
-make dist       # run tests and produce dist/adbfsplugin-<version>-macos.zip
+make dist       # run tests and produce per-arch release zips in dist/
 ```
 
 No dependencies beyond Xcode command-line tools. The integration tests run
