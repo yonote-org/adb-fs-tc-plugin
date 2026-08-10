@@ -7,7 +7,7 @@ PLUGIN_SRCS := adbfsplugin.cpp adbhandler.cpp wfxcompat.cpp
 UNIT_SRCS := tests/test_main.cpp tests/test_globals.cpp wfxcompat.cpp adbhandler.cpp
 HDRS := platform.h wfxcompat.h adbfsplugin.h adbhandler.h sdk/common.h sdk/wfxplugin.h
 
-.PHONY: all test clean
+.PHONY: all test clean universal dist
 
 all: $(BUILD)/adbfsplugin.wfx
 
@@ -32,6 +32,20 @@ test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/dlopen_test $(BUIL
 	$(BUILD)/unit_tests
 	$(BUILD)/integration_tests
 	$(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
+
+$(BUILD)/adbfsplugin-universal.wfx: $(PLUGIN_SRCS) $(HDRS) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -arch arm64 -arch x86_64 -dynamiclib -o $@ $(PLUGIN_SRCS)
+
+universal: $(BUILD)/adbfsplugin-universal.wfx
+
+dist: test $(BUILD)/adbfsplugin-universal.wfx $(BUILD)/dlopen_test
+	$(BUILD)/dlopen_test $(BUILD)/adbfsplugin-universal.wfx
+	rm -rf $(BUILD)/dist-stage dist
+	mkdir -p $(BUILD)/dist-stage dist
+	cp $(BUILD)/adbfsplugin-universal.wfx $(BUILD)/dist-stage/adbfsplugin.wfx
+	cp pluginst.inf README.md LICENCE $(BUILD)/dist-stage/
+	cd $(BUILD)/dist-stage && zip -q -r ../../dist/adbfsplugin-$(VERSION)-macos.zip .
+	@echo "Release: dist/adbfsplugin-$(VERSION)-macos.zip"
 
 clean:
 	rm -rf $(BUILD) dist
