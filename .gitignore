@@ -7,3 +7,6 @@
 ipch
 Debug
 Rel
+
+build/
+dist/
