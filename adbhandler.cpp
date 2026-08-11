@@ -29,6 +29,38 @@ string trim(string const& str, const char* sepSet) {
     return (first == string::npos) ? string() : str.substr(first, str.find_last_not_of(sepSet) - first + 1);
 }
 
+// The adb shell: channel is a pty, so device tools may emit terminal escape
+// sequences (ls colors, prompt titles) that would otherwise end up inside
+// "file names". Strips CSI (ESC[...X), OSC (ESC]...BEL/ST) and two-byte ESC
+// sequences.
+string StripAnsiEscapes(const string& in) {
+    string out;
+    size_t i = 0;
+    while (i < in.size()) {
+        unsigned char c = (unsigned char)in[i];
+        if (c != 0x1B) {
+            out.push_back((char)c);
+            i++;
+            continue;
+        }
+        i++;
+        if (i >= in.size()) break;
+        if (in[i] == '[') {          // CSI: parameter bytes, then final 0x40-0x7E
+            i++;
+            while (i < in.size() && ((unsigned char)in[i] < 0x40 || (unsigned char)in[i] > 0x7E)) i++;
+            if (i < in.size()) i++;
+        } else if (in[i] == ']') {   // OSC: until BEL or ESC-backslash
+            i++;
+            while (i < in.size() && in[i] != '\a' && in[i] != 0x1B) i++;
+            if (i < in.size() && in[i] == '\a') i++;
+            else if (i + 1 < in.size() && in[i] == 0x1B && in[i + 1] == '\\') i += 2;
+        } else {
+            i++;                     // ESC + single character
+        }
+    }
+    return out;
+}
+
 wstring PathConverter(wstring path) {
     for (auto& c : path)
         if (c == L'\\') c = L'/';
@@ -330,7 +362,11 @@ string* AdbCommunicator::ReadLine() {
     if (input.empty() || input == "===adbfsplugin-->") {
         return NULL;
     }
-    return new string(trim(input, " \t\r\n"));
+    string cleaned = trim(StripAnsiEscapes(input), " \t\r\n");
+    if (cleaned == "===adbfsplugin-->") {
+        return NULL;   // end marker wrapped in escapes by the terminal
+    }
+    return new string(cleaned);
 }
 
 wstring* AdbCommunicator::ReadLineW() {

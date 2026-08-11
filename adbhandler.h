@@ -60,6 +60,7 @@ int decode64(const char* input, char* output);
 int encode64(const char* input, char* output);
 std::wstring QuoteString(std::wstring str);
 std::string trim(std::string const& str, const char* sepSet);
+std::string StripAnsiEscapes(const std::string& in);
 std::wstring PathConverter(std::wstring path);
 bool ParseStatLine(const std::wstring& line, FileData* fd);
 int64_t unixTimeToFileTime(unsigned int utime);

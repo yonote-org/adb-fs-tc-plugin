@@ -175,7 +175,8 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
         } else if (cmd == "toybox echo adbfsprobe") {
             sendAll(fd, "adbfsprobe\n");
         } else if (cmd.rfind("toybox ls ", 0) == 0) {
-            sendAll(fd, "file one\nsubdir\nlink1\n\xF0\x9F\x98\x80.txt\n");
+            // stock toybox ls colorizes on a pty even with --color=never
+            sendAll(fd, "file one\n\x1B[1;34msubdir\x1B[0m\n\x1B[1;36mlink1\x1B[0m\n\xF0\x9F\x98\x80.txt\n");
         } else if (cmd.rfind("toybox stat ", 0) == 0) {
             auto args = quotedArgs(cmd);
             std::string out;

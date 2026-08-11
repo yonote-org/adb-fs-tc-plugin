@@ -151,6 +151,14 @@ TEST(getstat_maps_find_data) {
     CHECK_EQ(ft, unixTimeToFileTime(1600000000u));
     CHECK(u16_to_ws(fs.cFileName) == L"sub");
 }
+TEST(strip_ansi_escapes) {
+    CHECK(StripAnsiEscapes("\x1B[1;36msdcard\x1B[0m") == "sdcard");
+    CHECK(StripAnsiEscapes("plain name") == "plain name");
+    CHECK(StripAnsiEscapes("\x1B[38;5;208ma\x1B[0m b \x1B[Kc") == "a b c");
+    CHECK(StripAnsiEscapes("\x1B]0;window title\x07real") == "real");  // OSC + BEL
+    CHECK(StripAnsiEscapes("x\x1B") == "x");                            // lone trailing ESC
+    CHECK(StripAnsiEscapes("") == "");
+}
 TEST(find_adb_binary_env_override) {
     setenv("ADBFS_ADB", "/usr/bin/true", 1);
     CHECK(FindAdbBinary() == "/usr/bin/true");
