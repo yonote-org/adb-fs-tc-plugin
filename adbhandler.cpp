@@ -217,12 +217,15 @@ void AdbCommunicator::CleanBuffer(bool timeout) {
     actbufpospoint = actbuf;
     for (;;) {
         TIMEVAL tv;
-        tv.tv_sec = 0;
+        // timeout=true waits for a response (e.g. su result) — but bounded:
+        // a fast device may have answered inside the previous drain window
+        // already, and an unbounded select() then deadlocks the panel
+        tv.tv_sec = timeout ? 2 : 0;
         tv.tv_usec = 0;
         fd_set set;
         FD_ZERO(&set);
         FD_SET(s, &set);
-        if (select(s + 1, &set, NULL, NULL, timeout ? NULL : &tv) <= 0) return;
+        if (select(s + 1, &set, NULL, NULL, &tv) <= 0) return;
         recv(s, actbuf, BUF_SIZE, 0);
         if (timeout) return;
     }

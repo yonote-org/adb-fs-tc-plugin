@@ -24,13 +24,18 @@ $(BUILD)/dlopen_test: tests/test_dlopen.cpp | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ tests/test_dlopen.cpp
 
 INTEG_SRCS := tests/test_integration.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
+SU_SRCS := tests/test_su_hang.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 
 $(BUILD)/integration_tests: $(INTEG_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(INTEG_SRCS)
 
-test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
+$(BUILD)/su_hang_test: $(SU_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(SU_SRCS)
+
+test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 	$(BUILD)/unit_tests
 	$(BUILD)/integration_tests
+	$(BUILD)/su_hang_test
 	$(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 
 # Double Commander's plugin check (GetPluginBinaryType) only accepts THIN
