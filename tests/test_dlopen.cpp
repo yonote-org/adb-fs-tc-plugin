@@ -1,7 +1,7 @@
 // Verifies the built .wfx passes Double Commander's plugin validity check
 // (thin Mach-O magic — DC's GetPluginBinaryType rejects universal/fat binaries
 // as "This is not a valid plugin!"), loads with dlopen, and exposes every
-// export from adbfsplugin.def.
+// WFX entry point listed in kExports below.
 // Usage: test_dlopen [--magic-only] <path.wfx>
 #include <dlfcn.h>
 #include <cstdio>
