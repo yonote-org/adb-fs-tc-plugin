@@ -15,6 +15,9 @@ public:
     void CleanBuffer(bool timeout);
     void PushCommandW(std::wstring command);
     void SetSU(bool needsu) { _needsu = needsu; }
+    // Which toolbox the device offers: 0 = busybox, 1 = toybox (stock
+    // Android), 2 = plain shell applets. Probed lazily, once per connection.
+    int ToolMode();
 private:
     AdbCommunicator();
     ~AdbCommunicator();
@@ -25,6 +28,7 @@ private:
 
     SOCKET s;
     bool _needsu;
+    int _toolmode;
     static AdbCommunicator* _global_adb;
 
     char actbuf[BUF_SIZE];
@@ -61,6 +65,7 @@ bool ParseStatLine(const std::wstring& line, FileData* fd);
 int64_t unixTimeToFileTime(unsigned int utime);
 unsigned int fileTimeToUnixTime(int64_t ftime);
 std::string FindAdbBinary();
+std::wstring Tool(const wchar_t* applet);   // applet prefixed per ToolMode()
 
 std::list<FileData*>* DirList(std::wstring filename);
 void GetStat(WIN32_FIND_DATAW* fs, FileData* fd);

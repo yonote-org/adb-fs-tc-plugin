@@ -10,7 +10,10 @@
 //   <4-hex-len><payload> requests, OKAY responses, then a line-based shell.
 class FakeAdbServer {
 public:
-    FakeAdbServer();
+    // stock=true emulates a modern stock Android device: no busybox
+    // (commands fail with "inaccessible or not found"), toybox applets
+    // (ls/stat/mkdir/base64) available instead.
+    explicit FakeAdbServer(bool stock = false);
     ~FakeAdbServer();
     int port() const { return port_; }
     std::vector<std::string> commands();   // device shell commands, marker framing stripped
@@ -24,6 +27,7 @@ private:
     bool readLine(int fd, std::string* line);
     static void sendAll(int fd, const std::string& data);
 
+    bool stock_ = false;
     int listen_fd_ = -1;
     int port_ = 0;
     std::thread thread_;

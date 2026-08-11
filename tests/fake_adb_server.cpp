@@ -53,7 +53,7 @@ const char kFileContent[] = "hello adbfs!";
 
 } // namespace
 
-FakeAdbServer::FakeAdbServer() {
+FakeAdbServer::FakeAdbServer(bool stock) : stock_(stock) {
     listen_fd_ = socket(AF_INET, SOCK_STREAM, 0);
     int one = 1;
     setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
@@ -169,7 +169,45 @@ void FakeAdbServer::shellSession(int fd) {
 }
 
 void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
-    if (cmd.rfind("busybox ls ", 0) == 0) {
+    if (stock_) {
+        if (cmd.rfind("busybox", 0) == 0) {
+            sendAll(fd, "/system/bin/sh: busybox: inaccessible or not found\n");
+        } else if (cmd == "toybox echo adbfsprobe") {
+            sendAll(fd, "adbfsprobe\n");
+        } else if (cmd.rfind("toybox ls ", 0) == 0) {
+            sendAll(fd, "file one\nsubdir\nlink1\n\xF0\x9F\x98\x80.txt\n");
+        } else if (cmd.rfind("toybox stat ", 0) == 0) {
+            auto args = quotedArgs(cmd);
+            std::string out;
+            for (auto& a : args) {
+                if (a.find('%') != std::string::npos) continue;
+                std::string base = basenameOf(a);
+                if (base == "subdir")
+                    out += "755 -directory- 0 0 4096 1600000000 1600000100 1600000200 " + a + "\n";
+                else if (base == "link1")
+                    out += "777 -symbolic link- 0 0 11 1600000000 1600000100 1600000200 " + a + "\n";
+                else
+                    out += "644 -regular file- 1000 2000 12 1700000000 1700000001 1700000002 " + a + "\n";
+            }
+            sendAll(fd, out);
+        } else if (cmd.rfind("toybox base64 -d > ", 0) == 0) {
+            std::string data, l;
+            while (readLine(fd, &l)) {
+                if (l == "\x04") break;
+                data += l;
+                data += '\n';
+            }
+            std::lock_guard<std::mutex> lk(mu_);
+            uploaded_ = data;
+        } else if (cmd.rfind("toybox base64 ", 0) == 0) {
+            sendAll(fd, base64(kFileContent) + "\n");
+        }
+        // toybox mkdir/mv/cp/rm: recorded in commands_, empty output
+        return;
+    }
+    if (cmd == "busybox echo adbfsprobe") {
+        sendAll(fd, "adbfsprobe\n");
+    } else if (cmd.rfind("busybox ls ", 0) == 0) {
         sendAll(fd, "file one\nsubdir\nlink1\n\xF0\x9F\x98\x80.txt\n");
     } else if (cmd.rfind("busybox stat ", 0) == 0) {
         auto args = quotedArgs(cmd);

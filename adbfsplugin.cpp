@@ -115,7 +115,7 @@ DCEXPORT int DCPCALL FsFindClose(HANDLE Hdl) {
 }
 
 DCEXPORT BOOL DCPCALL FsMkDirW(WCHAR* Path) {
-    return RunCommand(L"busybox mkdir " + QuoteString(PathConverter(u16_to_ws(Path))));
+    return RunCommand(Tool(L"mkdir") + L" " + QuoteString(PathConverter(u16_to_ws(Path))));
 }
 
 DCEXPORT BOOL DCPCALL FsMkDir(char* Path) {
@@ -135,9 +135,9 @@ DCEXPORT int DCPCALL FsRenMovFileW(WCHAR* OldName, WCHAR* NewName, BOOL Move, BO
     wstring oldq = QuoteString(PathConverter(u16_to_ws(OldName)));
     wstring newq = QuoteString(PathConverter(u16_to_ws(NewName)));
     if (Move) {
-        return RunCommand(L"busybox mv -f " + oldq + L" " + newq) ? FS_FILE_OK : FS_FILE_WRITEERROR;
+        return RunCommand(Tool(L"mv") + L" -f " + oldq + L" " + newq) ? FS_FILE_OK : FS_FILE_WRITEERROR;
     } else {
-        return RunCommand(L"busybox cp -f " + oldq + L" " + newq) ? FS_FILE_OK : FS_FILE_WRITEERROR;
+        return RunCommand(Tool(L"cp") + L" -f " + oldq + L" " + newq) ? FS_FILE_OK : FS_FILE_WRITEERROR;
     }
 }
 
@@ -158,7 +158,13 @@ DCEXPORT int DCPCALL FsGetFileW(WCHAR* RemoteName, WCHAR* LocalName, int CopyFla
     FILE* f = fopen(local8.c_str(), "wb+");
     if (f == NULL) return FS_FILE_WRITEERROR;
     try {
-        AdbCommunicator::instance()->PushCommandW(L"busybox uuencode -m " + QuoteString(PathConverter(remote)) + L" x");
+        // busybox: uuencode -m emits a base64 body; elsewhere plain `base64`
+        // emits the same body without the begin/==== framing (which the
+        // decode loop below skips anyway)
+        wstring cmd = (AdbCommunicator::instance()->ToolMode() == 0)
+            ? L"busybox uuencode -m " + QuoteString(PathConverter(remote)) + L" x"
+            : Tool(L"base64") + L" " + QuoteString(PathConverter(remote));
+        AdbCommunicator::instance()->PushCommandW(cmd);
         string* line = AdbCommunicator::instance()->ReadLine();
         int64_t savedsize = 0;
         int64_t fullsize = ((int64_t)ri->SizeHigh << 32) | ri->SizeLow;
@@ -221,10 +227,19 @@ DCEXPORT int DCPCALL FsPutFileW(WCHAR* LocalName, WCHAR* RemoteName, int CopyFla
         return FS_FILE_READERROR;
     }
     try {
-        AdbCommunicator::instance()->PushCommandW(L"busybox uudecode -o " + QuoteString(PathConverter(remote)));
+        // busybox: uudecode with begin-base64 framing; elsewhere `base64 -d`
+        // reading the raw stream from the pty until EOF (^D)
+        bool uumode = (AdbCommunicator::instance()->ToolMode() == 0);
+        if (uumode) {
+            AdbCommunicator::instance()->PushCommandW(L"busybox uudecode -o " + QuoteString(PathConverter(remote)));
+        } else {
+            AdbCommunicator::instance()->PushCommandW(Tool(L"base64") + L" -d > " + QuoteString(PathConverter(remote)));
+        }
         ProgressT(local, remote, 0);
 
-        AdbCommunicator::instance()->PutData("begin-base64 644 x\n", 19);
+        if (uumode) {
+            AdbCommunicator::instance()->PutData("begin-base64 644 x\n", 19);
+        }
 
         struct stat st;
         int64_t fullsize = (stat(local8.c_str(), &st) == 0) ? (int64_t)st.st_size : 0;
@@ -281,7 +296,12 @@ DCEXPORT int DCPCALL FsPutFileW(WCHAR* LocalName, WCHAR* RemoteName, int CopyFla
             }
             AdbCommunicator::instance()->PutData(out, outwr + 1);
         }
-        AdbCommunicator::instance()->PutData("====\x04\n", 6);
+        if (uumode) {
+            AdbCommunicator::instance()->PutData("====\x04\n", 6);
+        } else {
+            // ^D at line start ends the pty input stream for `base64 -d`
+            AdbCommunicator::instance()->PutData("\x04\n", 2);
+        }
         Sleep(100);
 
         ProgressT(local, remote, 100);
@@ -299,7 +319,7 @@ DCEXPORT int DCPCALL FsPutFile(char* LocalName, char* RemoteName, int CopyFlags)
 }
 
 DCEXPORT BOOL DCPCALL FsDeleteFileW(WCHAR* RemoteName) {
-    return RunCommand(L"busybox rm " + QuoteString(PathConverter(u16_to_ws(RemoteName))));
+    return RunCommand(Tool(L"rm") + L" " + QuoteString(PathConverter(u16_to_ws(RemoteName))));
 }
 
 DCEXPORT BOOL DCPCALL FsDeleteFile(char* RemoteName) {

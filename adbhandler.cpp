@@ -122,9 +122,44 @@ AdbCommunicator::AdbCommunicator() {
     }
     s = INVALID_SOCKET;
     _needsu = (getenv("ADBFS_NO_SU") == NULL);
+    _toolmode = -1;
     actbufsize = 0;
     actbufpos = 0;
     actbufpospoint = actbuf;
+}
+
+// runs `<toolbox> echo adbfsprobe` on the device and checks for the echo
+static bool ProbeEcho(const wstring& command) {
+    AdbCommunicator::instance()->PushCommandW(command);
+    bool found = false;
+    string* line = AdbCommunicator::instance()->ReadLine();
+    while (line != NULL) {
+        if (*line == "adbfsprobe") found = true;
+        delete line;
+        line = AdbCommunicator::instance()->ReadLine();
+    }
+    return found;
+}
+
+int AdbCommunicator::ToolMode() {
+    if (_toolmode >= 0) return _toolmode;
+    try {
+        _toolmode = 2;   // set before probing: the probes recurse into PushCommandW
+        if (ProbeEcho(L"busybox echo adbfsprobe")) _toolmode = 0;
+        else if (ProbeEcho(L"toybox echo adbfsprobe")) _toolmode = 1;
+    } catch (wstring&) {
+        _toolmode = -1;  // connection failed — probe again next time
+        throw;
+    }
+    return _toolmode;
+}
+
+wstring Tool(const wchar_t* applet) {
+    switch (AdbCommunicator::instance()->ToolMode()) {
+        case 0: return wstring(L"busybox ") + applet;
+        case 1: return wstring(L"toybox ") + applet;
+        default: return applet;
+    }
 }
 
 void AdbCommunicator::Close() {
@@ -369,7 +404,12 @@ bool ParseStatLine(const wstring& line, FileData* fd) {
 
 void FillStat(wstring directory, list<FileData*>* fd) {
     try {
-        wstring command = L"busybox stat -c \"%a -%F- %g %u %s %X %Y %Z %N\" ";
+        // busybox stat supports %N (quoted name + link target); toybox/plain
+        // stat may not, so fall back to %n there
+        wstring command = Tool(L"stat") +
+            (AdbCommunicator::instance()->ToolMode() == 0
+                 ? L" -c \"%a -%F- %g %u %s %X %Y %Z %N\" "
+                 : L" -c \"%a -%F- %g %u %s %X %Y %Z %n\" ");
         for (auto i = fd->begin(); i != fd->end(); i++) {
             command.append(L" ");
             command.append(QuoteString(directory + (*i)->name));
@@ -409,7 +449,7 @@ void GetStat(WIN32_FIND_DATAW* fs, FileData* fd) {
 list<FileData*>* DirList(wstring filename) {
     auto* result = new list<FileData*>();
     try {
-        AdbCommunicator::instance()->PushCommandW(wstring(L"busybox ls --color=never -1 ") + QuoteString(filename));
+        AdbCommunicator::instance()->PushCommandW(Tool(L"ls") + L" --color=never -1 " + QuoteString(filename));
         wstring* line = AdbCommunicator::instance()->ReadLineW();
         while (line != NULL) {
             result->push_back(new FileData(*line));

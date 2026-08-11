@@ -14,9 +14,11 @@ lacks direct file access to the paths you're browsing (e.g. with root via `su`).
 
 - [Double Commander](https://doublecmd.sourceforge.io/) for macOS
 - `adb` (Android platform tools), e.g. `brew install android-platform-tools`
-- An Android device with **USB debugging** enabled and **busybox** installed
-  (the plugin runs `su` on connect by default; set `ADBFS_NO_SU=1` to skip it
-  on unrooted devices)
+- An Android device with **USB debugging** enabled. busybox is used when
+  present; on stock devices the plugin falls back automatically to the
+  system's toybox applets (`ls`, `stat`, `mkdir`, `base64`, …). Root is not
+  required — the plugin tries `su` once on connect and carries on without it
+  (set `ADBFS_NO_SU=1` to skip the attempt entirely).
 
 ## Install
 
