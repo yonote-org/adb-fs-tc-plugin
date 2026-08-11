@@ -175,8 +175,13 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
         } else if (cmd == "toybox echo adbfsprobe") {
             sendAll(fd, "adbfsprobe\n");
         } else if (cmd.rfind("toybox ls ", 0) == 0) {
-            // stock toybox ls colorizes on a pty even with --color=never
-            sendAll(fd, "file one\n\x1B[1;34msubdir\x1B[0m\n\x1B[1;36mlink1\x1B[0m\n\xF0\x9F\x98\x80.txt\n");
+            // on a pty, stock toybox ls colorizes AND backslash-escapes
+            // spaces; piped through cat it prints plain names
+            bool piped = cmd.size() >= 6 && cmd.compare(cmd.size() - 6, 6, " | cat") == 0;
+            if (piped)
+                sendAll(fd, "file one\nsubdir\nlink1\n\xF0\x9F\x98\x80.txt\n");
+            else
+                sendAll(fd, "file\\ one\n\x1B[1;34msubdir\x1B[0m\n\x1B[1;36mlink1\x1B[0m\n\xF0\x9F\x98\x80.txt\n");
         } else if (cmd.rfind("toybox stat ", 0) == 0) {
             // link1 models /sdcard: a symlink whose target is a directory,
             // visible only when stat is asked to follow (-L)

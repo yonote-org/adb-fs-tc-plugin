@@ -526,7 +526,9 @@ void GetStat(WIN32_FIND_DATAW* fs, FileData* fd) {
 list<FileData*>* DirList(wstring filename) {
     auto* result = new list<FileData*>();
     try {
-        AdbCommunicator::instance()->PushCommandW(Tool(L"ls") + L" --color=never -1 " + QuoteString(filename));
+        // `| cat` makes ls's stdout a pipe, not the pty — suppressing every
+        // tty-only behavior at the source (colors, backslash-escaped spaces)
+        AdbCommunicator::instance()->PushCommandW(Tool(L"ls") + L" -1 " + QuoteString(filename) + L" | cat");
         wstring* line = AdbCommunicator::instance()->ReadLineW();
         while (line != NULL) {
             result->push_back(new FileData(*line));
