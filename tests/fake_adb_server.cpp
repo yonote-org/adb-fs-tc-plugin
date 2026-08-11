@@ -53,7 +53,7 @@ const char kFileContent[] = "hello adbfs!";
 
 } // namespace
 
-FakeAdbServer::FakeAdbServer(bool stock) : stock_(stock) {
+FakeAdbServer::FakeAdbServer(bool stock, bool wireless) : stock_(stock), wireless_(wireless) {
     listen_fd_ = socket(AF_INET, SOCK_STREAM, 0);
     int one = 1;
     setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
@@ -86,6 +86,11 @@ std::string FakeAdbServer::uploaded() {
     return uploaded_;
 }
 
+std::vector<std::string> FakeAdbServer::transports() {
+    std::lock_guard<std::mutex> lk(mu_);
+    return transports_;
+}
+
 void FakeAdbServer::run() {
     while (!stop_) {
         int fd = accept(listen_fd_, nullptr, nullptr);
@@ -114,7 +119,15 @@ void FakeAdbServer::serveConnection(int fd) {
         int msglen = (int)strtol(lenbuf, nullptr, 16);
         std::string payload(msglen, 0);
         if (recv(fd, &payload[0], msglen, MSG_WAITALL) != msglen) return;
-        if (payload == "host:transport-usb") {
+        if (payload.rfind("host:transport", 0) == 0) {
+            {
+                std::lock_guard<std::mutex> lk(mu_);
+                transports_.push_back(payload);
+            }
+            if (wireless_ && payload == "host:transport-usb") {
+                sendAll(fd, "FAIL0010no devices found");
+                return;
+            }
             sendAll(fd, "OKAY");
         } else if (payload == "shell:") {
             sendAll(fd, "OKAY");

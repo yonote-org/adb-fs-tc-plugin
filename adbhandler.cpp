@@ -261,9 +261,19 @@ void AdbCommunicator::ReConnect() {
     }
     freeaddrinfo(result);
 
-    // switch to usb mode
-    // TODO: multiple devices support
-    SendStringToServer("0012host:transport-usb");
+    // Select the device: ADBFS_SERIAL pins a specific one (needed with
+    // several devices attached); otherwise transport-any takes the single
+    // connected device whatever its transport — USB or wireless TCP
+    // (transport-usb would FAIL for wireless devices).
+    const char* serial = getenv("ADBFS_SERIAL");
+    if (serial && *serial) {
+        std::string req = std::string("host:transport:") + serial;
+        char msg[wdirtypemax];
+        snprintf(msg, sizeof(msg), "%04x%s", (unsigned)req.size(), req.c_str());
+        SendStringToServer(msg);
+    } else {
+        SendStringToServer("0012host:transport-any");
+    }
     // start shell
     SendStringToServer("0006shell:");
 
