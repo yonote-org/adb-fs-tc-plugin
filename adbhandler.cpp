@@ -519,8 +519,11 @@ void GetStat(WIN32_FIND_DATAW* fs, FileData* fd) {
     int64_t ft = unixTimeToFileTime(fd->modificationTime);
     fs->ftLastWriteTime.dwLowDateTime = (DWORD)(ft & 0xFFFFFFFF);
     fs->ftLastWriteTime.dwHighDateTime = (DWORD)(ft >> 32);
-    fs->nFileSizeHigh = (DWORD)(fd->size >> 32);
-    fs->nFileSizeLow = (DWORD)(fd->size & 0x0FFFFFFFF);
+    // report 0 for directories: DC shows <DIR>/<LNK> in the size column only
+    // then, and the inode size from stat is meaningless to the user anyway
+    int64_t size = (fd->type == DIRECTORY) ? 0 : fd->size;
+    fs->nFileSizeHigh = (DWORD)(size >> 32);
+    fs->nFileSizeLow = (DWORD)(size & 0x0FFFFFFFF);
 }
 
 list<FileData*>* DirList(wstring filename) {

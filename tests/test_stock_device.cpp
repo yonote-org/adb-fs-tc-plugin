@@ -55,6 +55,8 @@ TEST(stock_device_listing_and_transfers) {
     CHECK(names.count(L"file one") == 1);
     CHECK(names.count(L"subdir") == 1);
     CHECK(entries[L"subdir"].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    CHECK_EQ(entries[L"subdir"].nFileSizeLow, (DWORD)0);   // so DC displays <DIR>
+    CHECK_EQ(entries[L"link1"].nFileSizeLow, (DWORD)0);    // dir link -> <LNK>
     CHECK_EQ(entries[L"file one"].dwReserved0, (DWORD)0644);
     CHECK_EQ(entries[L"file one"].nFileSizeLow, (DWORD)12);
 

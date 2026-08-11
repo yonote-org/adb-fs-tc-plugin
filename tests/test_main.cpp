@@ -135,21 +135,35 @@ TEST(parse_stat_rejects_malformed) {
 }
 TEST(getstat_maps_find_data) {
     FileData fd;
-    fd.name = L"sub";
-    fd.type = DIRECTORY;
-    fd.mode = 0755;
+    fd.name = L"big.bin";
+    fd.type = REGFILE;
+    fd.mode = 0644;
     fd.size = ((int64_t)1 << 32) | 5;
     fd.modificationTime = 1600000000u;
     WIN32_FIND_DATAW fs;
     GetStat(&fs, &fd);
     CHECK(fs.dwFileAttributes & 0x80000000u);            // FILE_ATTRIBUTE_UNIX_MODE
-    CHECK(fs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
-    CHECK_EQ(fs.dwReserved0, (DWORD)0755);
+    CHECK(!(fs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY));
+    CHECK_EQ(fs.dwReserved0, (DWORD)0644);
     CHECK_EQ(fs.nFileSizeHigh, (DWORD)1);
     CHECK_EQ(fs.nFileSizeLow, (DWORD)5);
     int64_t ft = ((int64_t)fs.ftLastWriteTime.dwHighDateTime << 32) | fs.ftLastWriteTime.dwLowDateTime;
     CHECK_EQ(ft, unixTimeToFileTime(1600000000u));
-    CHECK(u16_to_ws(fs.cFileName) == L"sub");
+    CHECK(u16_to_ws(fs.cFileName) == L"big.bin");
+}
+TEST(getstat_directory_reports_zero_size) {
+    // DC shows <DIR> in the size column only when a directory's size is 0
+    // (ufilefunctions.pas fsfSize); the inode size from stat must not leak
+    FileData fd;
+    fd.name = L"sub";
+    fd.type = DIRECTORY;
+    fd.mode = 0755;
+    fd.size = 4096;
+    WIN32_FIND_DATAW fs;
+    GetStat(&fs, &fd);
+    CHECK(fs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    CHECK_EQ(fs.nFileSizeHigh, (DWORD)0);
+    CHECK_EQ(fs.nFileSizeLow, (DWORD)0);
 }
 TEST(strip_ansi_escapes) {
     CHECK(StripAnsiEscapes("\x1B[1;36msdcard\x1B[0m") == "sdcard");
