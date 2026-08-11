@@ -24,16 +24,19 @@ itself cannot access directly (e.g. with root via `su`).
 
 ## Install
 
-1. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
+1. Download the latest release zip from the
+   [releases page](https://github.com/nyouna/adbfsplugin/releases/latest) —
+   or build it yourself with `make dist` (see below).
+2. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
    `…-x86_64.zip` for Intel (`uname -m` tells you which). The plugin ships as
    a thin single-architecture binary on purpose — Double Commander's plugin
    check rejects universal (fat) binaries as "This is not a valid plugin!".
-2. Unpack the zip somewhere permanent, e.g.
+3. Unpack the zip somewhere permanent, e.g.
    `~/Library/Application Support/doublecmd/plugins/wfx/adbfsplugin/`
    (the directory Double Commander's own installer uses).
-3. In Double Commander: **Configuration → Options… → Plugins →
+4. In Double Commander: **Configuration → Options… → Plugins →
    File System Plugins (WFX) → Add** — select `adbfsplugin.wfx` — **Apply**.
-4. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
+5. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
    the new **Android** entry.
 
 > Note: unlike Total Commander, Double Commander (verified against the 1.2.8
