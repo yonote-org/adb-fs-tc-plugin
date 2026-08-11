@@ -463,6 +463,44 @@ void FillStat(wstring directory, list<FileData*>* fd) {
             i++;
         }
         if (line) delete line;
+
+        // Second pass: symlinks (e.g. /sdcard) get the type/size/times of
+        // their target via stat -L so directory links are enterable; a
+        // dangling link keeps type LINK.
+        list<FileData*> links;
+        for (auto j = fd->begin(); j != fd->end(); j++) {
+            if ((*j)->type == LINK) {
+                (*j)->islink = true;
+                links.push_back(*j);
+            }
+        }
+        if (!links.empty()) {
+            command = Tool(L"stat") + L" -L -c \"%a -%F- %g %u %s %X %Y %Z %n\" ";
+            for (auto j = links.begin(); j != links.end(); j++) {
+                command.append(L" ");
+                command.append(QuoteString(directory + (*j)->name));
+            }
+            AdbCommunicator::instance()->PushCommandW(command);
+            line = AdbCommunicator::instance()->ReadLineW();
+            auto k = links.begin();
+            while ((line != NULL) && (k != links.end())) {
+                FileData target;
+                if (ParseStatLine(*line, &target)) {
+                    (*k)->type = target.type;
+                    (*k)->mode = target.mode;
+                    (*k)->size = target.size;
+                    (*k)->accessTime = target.accessTime;
+                    (*k)->modificationTime = target.modificationTime;
+                    (*k)->changeTime = target.changeTime;
+                    (*k)->uid = target.uid;
+                    (*k)->gid = target.gid;
+                }
+                delete line;
+                line = AdbCommunicator::instance()->ReadLineW();
+                k++;
+            }
+            if (line) delete line;
+        }
     } catch (wstring&) {
     }
 }
@@ -471,6 +509,9 @@ void GetStat(WIN32_FIND_DATAW* fs, FileData* fd) {
     memset(fs, 0, sizeof(WIN32_FIND_DATAW));
     ws_to_u16buf(fs->cFileName, countof(fs->cFileName), fd->name);
     fs->dwFileAttributes = FILE_ATTRIBUTE_UNIX_MODE;
+    if (fd->islink) {
+        fs->dwFileAttributes |= FILE_ATTRIBUTE_REPARSE_POINT;
+    }
     if (fd->type == DIRECTORY) {
         fs->dwFileAttributes |= FILE_ATTRIBUTE_DIRECTORY;
     }

@@ -159,6 +159,16 @@ TEST(strip_ansi_escapes) {
     CHECK(StripAnsiEscapes("x\x1B") == "x");                            // lone trailing ESC
     CHECK(StripAnsiEscapes("") == "");
 }
+TEST(getstat_symlink_to_directory) {
+    FileData fd;
+    fd.name = L"sdcard";
+    fd.type = DIRECTORY;    // followed target type
+    fd.islink = true;
+    WIN32_FIND_DATAW fs;
+    GetStat(&fs, &fd);
+    CHECK(fs.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    CHECK(fs.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
+}
 TEST(find_adb_binary_env_override) {
     setenv("ADBFS_ADB", "/usr/bin/true", 1);
     CHECK(FindAdbBinary() == "/usr/bin/true");

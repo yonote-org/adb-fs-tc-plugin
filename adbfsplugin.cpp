@@ -430,7 +430,8 @@ static int ContentGetValue(const wstring& path, int FieldIndex, void* FieldValue
         break;
     case 3: {
         char* text = (char*)FieldValue;
-        if (fd->type == REGFILE) snprintf(text, maxlen, "%s", "file");
+        if (fd->islink) snprintf(text, maxlen, "%s", "link");
+        else if (fd->type == REGFILE) snprintf(text, maxlen, "%s", "file");
         else if (fd->type == DIRECTORY) snprintf(text, maxlen, "%s", "dir");
         else if (fd->type == LINK) snprintf(text, maxlen, "%s", "link");
         else snprintf(text, maxlen, "%s", "other");

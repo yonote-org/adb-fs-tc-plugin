@@ -58,6 +58,17 @@ TEST(stock_device_listing_and_transfers) {
     CHECK_EQ(entries[L"file one"].dwReserved0, (DWORD)0644);
     CHECK_EQ(entries[L"file one"].nFileSizeLow, (DWORD)12);
 
+    // a symlink to a directory (like /sdcard) must be enterable: directory
+    // attribute set, marked as a link
+    CHECK(entries[L"link1"].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY);
+    CHECK(entries[L"link1"].dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT);
+    {
+        auto lpath = W(L"\\link1");
+        char text[64] = {0};
+        CHECK_EQ(FsContentGetValueW(lpath.data(), 3, 0, text, sizeof(text), 0), ft_string);
+        CHECK(std::string(text) == "link");
+    }
+
     // probes ran in order
     CHECK(hasCommand(server, "busybox echo adbfsprobe"));
     CHECK(hasCommand(server, "toybox echo adbfsprobe"));

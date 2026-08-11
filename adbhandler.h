@@ -41,12 +41,13 @@ enum FileTypeEnum { REGFILE, DIRECTORY, LINK, OTHER };
 
 class FileData {
 public:
-    FileData(std::wstring _name) : type(REGFILE), mode(0), size(0), accessTime(0),
+    FileData(std::wstring _name) : type(REGFILE), islink(false), mode(0), size(0), accessTime(0),
         modificationTime(0), changeTime(0), uid(0), gid(0),
         alt_name(_name), name(_name), cache_name(_name) {}
-    FileData() : type(REGFILE), mode(0), size(0), accessTime(0),
+    FileData() : type(REGFILE), islink(false), mode(0), size(0), accessTime(0),
         modificationTime(0), changeTime(0), uid(0), gid(0) {}
-    FileTypeEnum type;
+    FileTypeEnum type;      // for symlinks: the followed target's type
+    bool islink;
     unsigned int mode;
     int64_t size;
     unsigned int accessTime, modificationTime, changeTime;

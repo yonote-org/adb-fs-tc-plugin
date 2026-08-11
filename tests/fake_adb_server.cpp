@@ -178,6 +178,9 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
             // stock toybox ls colorizes on a pty even with --color=never
             sendAll(fd, "file one\n\x1B[1;34msubdir\x1B[0m\n\x1B[1;36mlink1\x1B[0m\n\xF0\x9F\x98\x80.txt\n");
         } else if (cmd.rfind("toybox stat ", 0) == 0) {
+            // link1 models /sdcard: a symlink whose target is a directory,
+            // visible only when stat is asked to follow (-L)
+            bool follow = cmd.find(" -L ") != std::string::npos;
             auto args = quotedArgs(cmd);
             std::string out;
             for (auto& a : args) {
@@ -186,7 +189,9 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
                 if (base == "subdir")
                     out += "755 -directory- 0 0 4096 1600000000 1600000100 1600000200 " + a + "\n";
                 else if (base == "link1")
-                    out += "777 -symbolic link- 0 0 11 1600000000 1600000100 1600000200 " + a + "\n";
+                    out += follow
+                        ? "771 -directory- 9997 0 4096 1600000000 1600000100 1600000200 " + a + "\n"
+                        : "777 -symbolic link- 0 0 11 1600000000 1600000100 1600000200 " + a + "\n";
                 else
                     out += "644 -regular file- 1000 2000 12 1700000000 1700000001 1700000002 " + a + "\n";
             }
@@ -211,6 +216,7 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
     } else if (cmd.rfind("busybox ls ", 0) == 0) {
         sendAll(fd, "file one\nsubdir\nlink1\n\xF0\x9F\x98\x80.txt\n");
     } else if (cmd.rfind("busybox stat ", 0) == 0) {
+        bool follow = cmd.find(" -L ") != std::string::npos;
         auto args = quotedArgs(cmd);
         std::string out;
         for (auto& a : args) {
@@ -219,7 +225,9 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
             if (base == "subdir")
                 out += "755 -directory- 0 0 4096 1600000000 1600000100 1600000200 '" + a + "'\n";
             else if (base == "link1")
-                out += "777 -symbolic link- 0 0 11 1600000000 1600000100 1600000200 '" + a + "' -> '/target'\n";
+                out += follow
+                    ? "771 -directory- 9997 0 4096 1600000000 1600000100 1600000200 '" + a + "'\n"
+                    : "777 -symbolic link- 0 0 11 1600000000 1600000100 1600000200 '" + a + "' -> '/target'\n";
             else
                 out += "644 -regular file- 1000 2000 12 1700000000 1700000001 1700000002 '" + a + "'\n";
         }
