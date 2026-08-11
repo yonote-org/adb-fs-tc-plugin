@@ -68,8 +68,9 @@ Two hard packaging rules that follow from Double Commander's loader:
   not fatal — the server may already run), then TCP to `127.0.0.1:5037`
   (`ANDROID_ADB_SERVER_PORT` overrides), then the ADB *smart-socket* protocol:
   `<4-hex-digit length><payload>` requests, `OKAY`/`FAIL` responses. The
-  plugin sends `host:transport-usb` (single USB device) then `shell:`,
-  leaving a raw pty shell on the socket.
+  plugin sends `host:transport-any` (the single connected device, USB or
+  wireless TCP; `ADBFS_SERIAL` switches this to `host:transport:<serial>`)
+  then `shell:`, leaving a raw pty shell on the socket.
 - **su:** unless `ADBFS_NO_SU` is set, `su\n` is sent once after connect.
   The result is drained with a **bounded** 2-second `select()`
   (`CleanBuffer(true)`) — an unbounded wait deadlocked the panel on devices
@@ -124,6 +125,7 @@ needed (`FindAdbBinary` failures are non-fatal by design).
 | `integration_tests` | `test_integration.cpp` | Full plugin lifecycle against `FakeAdbServer`: connect, list, stat, download, upload, verifying both the results and the exact shell commands sent. |
 | `su_hang_test` | `test_su_hang.cpp` | Regression: the su handshake must not deadlock when the device answers within the drain window. |
 | `stock_device_test` | `test_stock_device.cpp` | The no-busybox path: toybox fallback for listing, stat and transfers. |
+| `wireless_device_test` | `test_wireless_device.cpp` | Wireless (TCP) devices: the server FAILs `host:transport-usb`, so the plugin must select via `host:transport-any`, and `ADBFS_SERIAL` must pin a specific serial. |
 | `dlopen_test` | `test_dlopen.cpp` | Loads the built `.wfx` with `dlopen` and resolves every export in its `kExports` list — catches missing symbols and ABI breaks. `--magic-only` variant checks the Mach-O header of a foreign-arch build. |
 
 Mechanics:

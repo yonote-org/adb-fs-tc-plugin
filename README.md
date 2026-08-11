@@ -54,6 +54,7 @@ Everything is optional, via environment variables:
 |---|---|
 | `ADBFS_ADB` | Full path to the `adb` binary (default: search `$PATH`, `/opt/homebrew/bin`, `/usr/local/bin`, `~/Library/Android/sdk/platform-tools`) |
 | `ANDROID_ADB_SERVER_PORT` | ADB server port (default `5037`, the same variable adb itself uses) |
+| `ADBFS_SERIAL` | Serial of the device to use (as shown by `adb devices`), for when several devices are attached. Default: the single connected device, USB or wireless |
 | `ADBFS_NO_SU` | If set, never run `su` after connecting (for unrooted devices) |
 
 ## Building from source
@@ -71,8 +72,8 @@ conventions, test layout and release process.
 
 ## Limitations
 
-- Single device only (`host:transport-usb`) — with several devices attached,
-  adb picks the USB one.
+- One device at a time. USB and wireless (TCP) connections both work; with
+  several devices attached at once, set `ADBFS_SERIAL` to pick one.
 - No `FsSetTime` / `FsSetAttr` (timestamps and permissions cannot be edited).
 - Transfers are slower than `adb pull/push` because they run base64-encoded
   through the device shell.
