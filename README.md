@@ -26,7 +26,7 @@ itself cannot access directly (e.g. with root via `su`).
 ## Install
 
 1. Download the latest release zip from the
-   [releases page](https://github.com/yonote-org/adbfsplugin/releases/latest) —
+   [releases page](https://github.com/yonote-org/ADB-Filesystem-DoubleCommander-plugin-for-Mac/releases/latest) —
    or build it yourself with `make dist` (see below).
 2. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
    `…-x86_64.zip` for Intel (`uname -m` tells you which). The plugin ships as
