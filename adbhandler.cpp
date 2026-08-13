@@ -261,6 +261,21 @@ void AdbCommunicator::ReConnect() {
     }
     freeaddrinfo(result);
 
+    // Inactivity timeout on reads: a silently-dead device link (Wi-Fi gone
+    // without the adb server noticing) must error out instead of blocking
+    // DC's UI thread in recv forever. ADBFS_READ_TIMEOUT seconds overrides
+    // the default; 0 disables — needed if silent long-running commands
+    // (a huge rm -r / cp) legitimately produce no output for longer.
+    int rcvsecs = 30;
+    const char* toenv = getenv("ADBFS_READ_TIMEOUT");
+    if (toenv && *toenv) rcvsecs = atoi(toenv);
+    if (rcvsecs > 0) {
+        TIMEVAL rcvto;
+        rcvto.tv_sec = rcvsecs;
+        rcvto.tv_usec = 0;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
+    }
+
     // Select the device: ADBFS_SERIAL pins a specific one (needed with
     // several devices attached); otherwise transport-any takes the single
     // connected device whatever its transport — USB or wireless TCP
@@ -376,8 +391,10 @@ string* AdbCommunicator::ReadLine() {
         bytesRead = ReadBuf();
     }
     if (bytesRead == SOCKET_ERROR) {
+        bool timedout = (errno == EAGAIN || errno == EWOULDBLOCK);   // SO_RCVTIMEO expired
         Close();
-        throw wstring(L"Socket Error");
+        throw timedout ? wstring(L"<000E - device not answering (read timeout)>")
+                       : wstring(L"Socket Error");
     }
     if (input.empty() || input == "===adbfsplugin-->") {
         return NULL;

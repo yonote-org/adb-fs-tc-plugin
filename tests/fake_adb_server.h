@@ -23,6 +23,7 @@ public:
     std::string uploaded();                // raw lines captured after a uudecode command
     std::vector<std::string> transports(); // host:transport* requests received
     void dropConnection();                 // kill the active connection (device vanished)
+    void goSilent();                       // device stops answering but the TCP link stays up
 
 private:
     void run();
@@ -36,6 +37,7 @@ private:
     bool wireless_ = false;
     int listen_fd_ = -1;
     std::atomic<int> conn_fd_{-1};
+    std::atomic<bool> silent_{false};
     int port_ = 0;
     std::thread thread_;
     std::atomic<bool> stop_{false};

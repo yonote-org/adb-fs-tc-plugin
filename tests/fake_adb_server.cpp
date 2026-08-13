@@ -108,6 +108,10 @@ void FakeAdbServer::dropConnection() {
     if (fd >= 0) shutdown(fd, SHUT_RDWR);
 }
 
+void FakeAdbServer::goSilent() {
+    silent_ = true;
+}
+
 void FakeAdbServer::sendAll(int fd, const std::string& data) {
     size_t off = 0;
     while (off < data.size()) {
@@ -166,6 +170,7 @@ bool FakeAdbServer::readLine(int fd, std::string* line) {
 void FakeAdbServer::shellSession(int fd) {
     std::string line;
     while (readLine(fd, &line)) {
+        if (silent_) continue;   // wedged device: reads everything, answers nothing
         if (line == "su") {
             sendAll(fd, "# ");
             continue;
