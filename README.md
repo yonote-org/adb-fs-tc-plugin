@@ -28,23 +28,23 @@ itself cannot access directly (e.g. with root via `su`).
 ### With Homebrew (recommended)
 
 ```sh
-brew install --cask yonote-org/tap/adb-filesystem-doublecommander-plugin
+brew install --cask yonote-org/tap/adb-fs-tc-plugin
 ```
 
 That's the whole installation: the right architecture is picked
 automatically, the plugin lands at
-`$(brew --prefix)/share/adb-filesystem-doublecommander-plugin/adbfsplugin.wfx`,
+`$(brew --prefix)/share/adb-fs-tc-plugin/adbfsplugin.wfx`,
 and it **registers itself in Double Commander** (a backup of
 `doublecmd.xml` is kept next to it). Restart Double Commander and enter the
 **Android** entry in the drive list. The only cases needing a hand: if
 Double Commander was running or had never been started, quit it and run
-`brew reinstall --cask adb-filesystem-doublecommander-plugin` to redo the
+`brew reinstall --cask adb-fs-tc-plugin` to redo the
 registration. `brew upgrade` keeps the plugin current.
 
 ### From a release zip
 
 1. Download the latest release zip from the
-   [releases page](https://github.com/yonote-org/adb-filesystem-doublecommander-plugin/releases/latest) —
+   [releases page](https://github.com/yonote-org/adb-fs-tc-plugin/releases/latest) —
    or build it yourself with `make dist` (see below).
 2. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
    `…-x86_64.zip` for Intel (`uname -m` tells you which). The plugin ships as
