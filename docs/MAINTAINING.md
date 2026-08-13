@@ -80,6 +80,11 @@ Two hard packaging rules that follow from Double Commander's loader:
   forever, so ignoring it spins the UI thread — see
   `test_disconnect_recovery.cpp`); `PushCommandW` reconnects on the next
   command.
+- **Read timeout:** the socket carries `SO_RCVTIMEO` (default 30 s,
+  `ADBFS_READ_TIMEOUT` overrides, `0` disables) so a silently-dead link —
+  Wi-Fi gone without the adb server noticing — surfaces as
+  `<000E - device not answering (read timeout)>` instead of blocking `recv`
+  forever (see `test_read_timeout.cpp`).
 - **Command framing:** every command is wrapped as
   `echo "===adbfsplugin<--" ; <cmd> ; echo "===adbfsplugin-->"`. `ReadLine`
   skips everything before the start marker (the pty echoes the command back)
@@ -132,6 +137,7 @@ needed (`FindAdbBinary` failures are non-fatal by design).
 | `stock_device_test` | `test_stock_device.cpp` | The no-busybox path: toybox fallback for listing, stat and transfers. |
 | `wireless_device_test` | `test_wireless_device.cpp` | Wireless (TCP) devices: the server FAILs `host:transport-usb`, so the plugin must select via `host:transport-any`, and `ADBFS_SERIAL` must pin a specific serial. |
 | `disconnect_recovery_test` | `test_disconnect_recovery.cpp` | Regression: when the device vanishes mid-session the drain loop must notice EOF instead of spinning select/recv forever on the UI thread, and the next listing must reconnect. |
+| `read_timeout_test` | `test_read_timeout.cpp` | Regression: a device that goes silent while the TCP link stays up must hit the `ADBFS_READ_TIMEOUT` inactivity window instead of blocking `recv` forever. |
 | `dlopen_test` | `test_dlopen.cpp` | Loads the built `.wfx` with `dlopen` and resolves every export in its `kExports` list — catches missing symbols and ABI breaks. `--magic-only` variant checks the Mach-O header of a foreign-arch build. |
 
 Mechanics:

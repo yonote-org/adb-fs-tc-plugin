@@ -5,7 +5,8 @@ Browse an Android device's filesystem from
 USB debugging. This is a WFX (virtual file system) plugin: the device shows up
 as an **Android** entry in Double Commander's drive list, and you can list,
 copy, move, rename, delete and create directories on it like on any other
-filesystem.
+filesystem. Double-clicking a file opens it in its default macOS application
+(Double Commander downloads a temporary local copy and cleans it up itself).
 
 The plugin talks to the local ADB server, opens a shell on the device, and
 drives it with `busybox` commands (falling back to stock Android's `toybox`
@@ -56,6 +57,7 @@ Everything is optional, via environment variables:
 | `ANDROID_ADB_SERVER_PORT` | ADB server port (default `5037`, the same variable adb itself uses) |
 | `ADBFS_SERIAL` | Serial of the device to use (as shown by `adb devices`), for when several devices are attached. Default: the single connected device, USB or wireless |
 | `ADBFS_NO_SU` | If set, never run `su` after connecting (for unrooted devices) |
+| `ADBFS_READ_TIMEOUT` | Seconds of read inactivity before giving up on the device (default `30`, `0` disables). Raise it if silent long-running operations — a huge `rm -r` or `cp` — legitimately produce no output for longer |
 
 ## Building from source
 
