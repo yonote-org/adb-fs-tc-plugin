@@ -104,7 +104,11 @@ Two hard packaging rules that follow from Double Commander's loader:
   pseudo-file with the marker as its name (upstream's convention). Those
   marker entries are inert: `IsErrorMarker` makes every file operation
   (open/download/upload/rename/delete) refuse them locally so the marker
-  text is never sent to the device as a path.
+  text is never sent to the device as a path — and the refusals use the
+  *silent* codes (`FS_FILE_USERABORT`, `FS_EXEC_OK`, delete claims success)
+  because `NOTSUPPORTED`/`EXEC_ERROR` make the commander pop error dialogs.
+  The F2 inline-rename box still appears (the commander opens it before
+  consulting the plugin); confirming it is a silent no-op.
 
 ## Code conventions
 

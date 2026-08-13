@@ -162,22 +162,25 @@ TEST(error_marker_entries_are_inert) {
     setenv("ADBFS_ADB", "/usr/bin/true", 1);
     setenv("ADBFS_NO_SU", "1", 1);
 
+    // Silent no-op codes on purpose: FS_FILE_USERABORT and FS_EXEC_OK make
+    // the commander show no error dialog at all, versus NOTSUPPORTED /
+    // EXEC_ERROR which pop "Function not supported!" / "Cannot open" boxes.
     auto marker = W(L"\\<000B - FAIL response from adb server>");
     auto open = W(L"open");
-    CHECK_EQ(FsExecuteFileW(NULL, marker.data(), open.data()), FS_EXEC_ERROR);
+    CHECK_EQ(FsExecuteFileW(NULL, marker.data(), open.data()), FS_EXEC_OK);
 
     RemoteInfoStruct ri;
     memset(&ri, 0, sizeof(ri));
     auto local = W(L"/tmp/adbfs_marker_test.bin");
-    CHECK_EQ(FsGetFileW(marker.data(), local.data(), FS_COPYFLAGS_OVERWRITE, &ri), FS_FILE_NOTSUPPORTED);
+    CHECK_EQ(FsGetFileW(marker.data(), local.data(), FS_COPYFLAGS_OVERWRITE, &ri), FS_FILE_USERABORT);
     unlink("/tmp/adbfs_marker_test.bin");
 
     auto target = W(L"\\renamed.txt");
-    CHECK_EQ(FsRenMovFileW(marker.data(), target.data(), 1, 1, &ri), FS_FILE_NOTSUPPORTED);
-    CHECK_EQ(FsRenMovFileW(target.data(), marker.data(), 1, 1, &ri), FS_FILE_NOTSUPPORTED);
-    CHECK_EQ(FsPutFileW(local.data(), marker.data(), FS_COPYFLAGS_OVERWRITE), FS_FILE_NOTSUPPORTED);
-    CHECK_EQ(FsDeleteFileW(marker.data()), 0);
-    CHECK_EQ(FsRemoveDirW(marker.data()), 0);
+    CHECK_EQ(FsRenMovFileW(marker.data(), target.data(), 1, 1, &ri), FS_FILE_USERABORT);
+    CHECK_EQ(FsRenMovFileW(target.data(), marker.data(), 1, 1, &ri), FS_FILE_USERABORT);
+    CHECK_EQ(FsPutFileW(local.data(), marker.data(), FS_COPYFLAGS_OVERWRITE), FS_FILE_USERABORT);
+    CHECK_EQ(FsDeleteFileW(marker.data()), 1);
+    CHECK_EQ(FsRemoveDirW(marker.data()), 1);
 
     for (auto& c : server.commands()) {
         CHECK(c.find("000B") == std::string::npos);
