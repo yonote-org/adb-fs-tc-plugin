@@ -151,6 +151,41 @@ TEST(execute_open_delegates_download_to_commander) {
     CHECK_EQ(FsExecuteFile(NULL, apath, aopen), FS_EXEC_YOURSELF);
 }
 
+TEST(error_marker_entries_are_inert) {
+    // The <0XXX - ...> pseudo-entries a failed listing produces are status
+    // messages, not files: opening, downloading, renaming or deleting them
+    // must be refused locally, never turned into device commands.
+    FakeAdbServer server;
+    char portstr[16];
+    snprintf(portstr, sizeof(portstr), "%d", server.port());
+    setenv("ANDROID_ADB_SERVER_PORT", portstr, 1);
+    setenv("ADBFS_ADB", "/usr/bin/true", 1);
+    setenv("ADBFS_NO_SU", "1", 1);
+
+    auto marker = W(L"\\<000B - FAIL response from adb server>");
+    auto open = W(L"open");
+    CHECK_EQ(FsExecuteFileW(NULL, marker.data(), open.data()), FS_EXEC_ERROR);
+
+    RemoteInfoStruct ri;
+    memset(&ri, 0, sizeof(ri));
+    auto local = W(L"/tmp/adbfs_marker_test.bin");
+    CHECK_EQ(FsGetFileW(marker.data(), local.data(), FS_COPYFLAGS_OVERWRITE, &ri), FS_FILE_NOTSUPPORTED);
+    unlink("/tmp/adbfs_marker_test.bin");
+
+    auto target = W(L"\\renamed.txt");
+    CHECK_EQ(FsRenMovFileW(marker.data(), target.data(), 1, 1, &ri), FS_FILE_NOTSUPPORTED);
+    CHECK_EQ(FsRenMovFileW(target.data(), marker.data(), 1, 1, &ri), FS_FILE_NOTSUPPORTED);
+    CHECK_EQ(FsPutFileW(local.data(), marker.data(), FS_COPYFLAGS_OVERWRITE), FS_FILE_NOTSUPPORTED);
+    CHECK_EQ(FsDeleteFileW(marker.data()), 0);
+    CHECK_EQ(FsRemoveDirW(marker.data()), 0);
+
+    for (auto& c : server.commands()) {
+        CHECK(c.find("000B") == std::string::npos);
+    }
+    auto root = W(L"\\");
+    FsDisconnectW(root.data());
+}
+
 int main() {
     alarm(30);   // hard stop if the protocol deadlocks
     return run_all();

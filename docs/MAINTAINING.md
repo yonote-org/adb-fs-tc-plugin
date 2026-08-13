@@ -101,7 +101,10 @@ Two hard packaging rules that follow from Double Commander's loader:
   `^D` at line start. Errors are thrown as `std::wstring` markers like
   `<000B - FAIL response from adb server>` — caught at the entry-point layer
   and either returned as `FS_FILE_*` codes or, in listings, surfaced as a
-  pseudo-file with the marker as its name (upstream's convention).
+  pseudo-file with the marker as its name (upstream's convention). Those
+  marker entries are inert: `IsErrorMarker` makes every file operation
+  (open/download/upload/rename/delete) refuse them locally so the marker
+  text is never sent to the device as a path.
 
 ## Code conventions
 

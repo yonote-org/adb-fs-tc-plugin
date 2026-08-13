@@ -67,6 +67,15 @@ wstring PathConverter(wstring path) {
     return path;
 }
 
+// The <0XXX - ...> pseudo-entries a failed listing produces are status
+// messages, not files — every file operation must refuse them instead of
+// sending the marker text to the device as a path.
+bool IsErrorMarker(const wstring& path) {
+    size_t sl = path.find_last_of(L"/\\");
+    wstring base = (sl == wstring::npos) ? path : path.substr(sl + 1);
+    return base.size() >= 3 && base[0] == L'<' && base[1] == L'0' && base.back() == L'>';
+}
+
 // adb binary discovery: $ADBFS_ADB, then PATH, then common macOS install locations
 string FindAdbBinary() {
     const char* env = getenv("ADBFS_ADB");
@@ -394,7 +403,7 @@ string* AdbCommunicator::ReadLine() {
         bool timedout = (errno == EAGAIN || errno == EWOULDBLOCK);   // SO_RCVTIMEO expired
         Close();
         throw timedout ? wstring(L"<000E - device not answering (read timeout)>")
-                       : wstring(L"Socket Error");
+                       : wstring(L"<000F - socket error>");
     }
     if (input.empty() || input == "===adbfsplugin-->") {
         return NULL;

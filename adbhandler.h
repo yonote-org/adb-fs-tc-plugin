@@ -68,6 +68,7 @@ int64_t unixTimeToFileTime(unsigned int utime);
 unsigned int fileTimeToUnixTime(int64_t ftime);
 std::string FindAdbBinary();
 std::wstring Tool(const wchar_t* applet);   // applet prefixed per ToolMode()
+bool IsErrorMarker(const std::wstring& path);  // <0XXX - ...> pseudo-entry?
 
 std::list<FileData*>* DirList(std::wstring filename);
 void GetStat(WIN32_FIND_DATAW* fs, FileData* fd);

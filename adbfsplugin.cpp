@@ -124,6 +124,8 @@ DCEXPORT BOOL DCPCALL FsMkDir(char* Path) {
 }
 
 DCEXPORT int DCPCALL FsExecuteFileW(HWND MainWin, WCHAR* RemoteName, WCHAR* Verb) {
+    if (IsErrorMarker(u16_to_ws(RemoteName)))
+        return FS_EXEC_ERROR;
     // FS_EXEC_YOURSELF makes the commander download the file to its own temp
     // dir, open it with the default application, and clean the copy up itself
     if (u16_to_ws(Verb) == L"open") {
@@ -138,6 +140,8 @@ DCEXPORT int DCPCALL FsExecuteFile(HWND MainWin, char* RemoteName, char* Verb) {
 }
 
 DCEXPORT int DCPCALL FsRenMovFileW(WCHAR* OldName, WCHAR* NewName, BOOL Move, BOOL OverWrite, RemoteInfoStruct* ri) {
+    if (IsErrorMarker(u16_to_ws(OldName)) || IsErrorMarker(u16_to_ws(NewName)))
+        return FS_FILE_NOTSUPPORTED;
     wstring oldq = QuoteString(PathConverter(u16_to_ws(OldName)));
     wstring newq = QuoteString(PathConverter(u16_to_ws(NewName)));
     if (Move) {
@@ -153,6 +157,8 @@ DCEXPORT int DCPCALL FsRenMovFile(char* OldName, char* NewName, BOOL Move, BOOL 
 }
 
 DCEXPORT int DCPCALL FsGetFileW(WCHAR* RemoteName, WCHAR* LocalName, int CopyFlags, RemoteInfoStruct* ri) {
+    if (IsErrorMarker(u16_to_ws(RemoteName)))
+        return FS_FILE_NOTSUPPORTED;
     wstring remote = u16_to_ws(RemoteName);
     wstring local = u16_to_ws(LocalName);
     string local8 = ws_to_utf8(local);
@@ -225,6 +231,8 @@ DCEXPORT int DCPCALL FsGetFile(char* RemoteName, char* LocalName, int CopyFlags,
 }
 
 DCEXPORT int DCPCALL FsPutFileW(WCHAR* LocalName, WCHAR* RemoteName, int CopyFlags) {
+    if (IsErrorMarker(u16_to_ws(RemoteName)))
+        return FS_FILE_NOTSUPPORTED;
     wstring local = u16_to_ws(LocalName);
     wstring remote = u16_to_ws(RemoteName);
     string local8 = ws_to_utf8(local);
@@ -325,6 +333,8 @@ DCEXPORT int DCPCALL FsPutFile(char* LocalName, char* RemoteName, int CopyFlags)
 }
 
 DCEXPORT BOOL DCPCALL FsDeleteFileW(WCHAR* RemoteName) {
+    if (IsErrorMarker(u16_to_ws(RemoteName)))
+        return 0;
     return RunCommand(Tool(L"rm") + L" " + QuoteString(PathConverter(u16_to_ws(RemoteName))));
 }
 
@@ -335,6 +345,8 @@ DCEXPORT BOOL DCPCALL FsDeleteFile(char* RemoteName) {
 
 DCEXPORT BOOL DCPCALL FsRemoveDirW(WCHAR* RemoteName) {
     if (u16len(RemoteName) < pluginrootlen + 2)
+        return 0;
+    if (IsErrorMarker(u16_to_ws(RemoteName)))
         return 0;
     return RunCommand(L"rm -r " + QuoteString(PathConverter(u16_to_ws(RemoteName))));
 }
