@@ -75,6 +75,11 @@ Two hard packaging rules that follow from Double Commander's loader:
   The result is drained with a **bounded** 2-second `select()`
   (`CleanBuffer(true)`) — an unbounded wait deadlocked the panel on devices
   that answered fast (see `test_su_hang.cpp`).
+- **Dead connections:** `CleanBuffer`'s drain loop treats `recv() <= 0` as a
+  dead connection and closes the socket (select reports EOF as "readable"
+  forever, so ignoring it spins the UI thread — see
+  `test_disconnect_recovery.cpp`); `PushCommandW` reconnects on the next
+  command.
 - **Command framing:** every command is wrapped as
   `echo "===adbfsplugin<--" ; <cmd> ; echo "===adbfsplugin-->"`. `ReadLine`
   skips everything before the start marker (the pty echoes the command back)
@@ -126,6 +131,7 @@ needed (`FindAdbBinary` failures are non-fatal by design).
 | `su_hang_test` | `test_su_hang.cpp` | Regression: the su handshake must not deadlock when the device answers within the drain window. |
 | `stock_device_test` | `test_stock_device.cpp` | The no-busybox path: toybox fallback for listing, stat and transfers. |
 | `wireless_device_test` | `test_wireless_device.cpp` | Wireless (TCP) devices: the server FAILs `host:transport-usb`, so the plugin must select via `host:transport-any`, and `ADBFS_SERIAL` must pin a specific serial. |
+| `disconnect_recovery_test` | `test_disconnect_recovery.cpp` | Regression: when the device vanishes mid-session the drain loop must notice EOF instead of spinning select/recv forever on the UI thread, and the next listing must reconnect. |
 | `dlopen_test` | `test_dlopen.cpp` | Loads the built `.wfx` with `dlopen` and resolves every export in its `kExports` list — catches missing symbols and ABI breaks. `--magic-only` variant checks the Mach-O header of a foreign-arch build. |
 
 Mechanics:
