@@ -22,6 +22,7 @@ public:
     std::vector<std::string> commands();   // device shell commands, marker framing stripped
     std::string uploaded();                // raw lines captured after a uudecode command
     std::vector<std::string> transports(); // host:transport* requests received
+    void dropConnection();                 // kill the active connection (device vanished)
 
 private:
     void run();
@@ -34,6 +35,7 @@ private:
     bool stock_ = false;
     bool wireless_ = false;
     int listen_fd_ = -1;
+    std::atomic<int> conn_fd_{-1};
     int port_ = 0;
     std::thread thread_;
     std::atomic<bool> stop_{false};

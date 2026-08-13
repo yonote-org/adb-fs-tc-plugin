@@ -96,9 +96,16 @@ void FakeAdbServer::run() {
         int fd = accept(listen_fd_, nullptr, nullptr);
         if (fd < 0) return;
         rbuf_.clear();
+        conn_fd_ = fd;
         serveConnection(fd);
+        conn_fd_ = -1;
         close(fd);
     }
+}
+
+void FakeAdbServer::dropConnection() {
+    int fd = conn_fd_.exchange(-1);
+    if (fd >= 0) shutdown(fd, SHUT_RDWR);
 }
 
 void FakeAdbServer::sendAll(int fd, const std::string& data) {

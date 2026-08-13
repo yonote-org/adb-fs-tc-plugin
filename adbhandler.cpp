@@ -303,7 +303,13 @@ void AdbCommunicator::CleanBuffer(bool timeout) {
         FD_ZERO(&set);
         FD_SET(s, &set);
         if (select(s + 1, &set, NULL, NULL, &tv) <= 0) return;
-        recv(s, actbuf, BUF_SIZE, 0);
+        // EOF/error also counts as "readable": without this check a dead
+        // connection (device vanished) spins this loop forever on the UI
+        // thread — select flags the socket, recv keeps returning <= 0
+        if (recv(s, actbuf, BUF_SIZE, 0) <= 0) {
+            Close();
+            return;
+        }
         if (timeout) return;
     }
 }
@@ -315,6 +321,10 @@ void AdbCommunicator::PushCommandW(wstring command) {
     }
 
     CleanBuffer(false);
+    if (s == INVALID_SOCKET) {  // the drain found the connection dead
+        ReConnect();
+        Sleep(500);
+    }
 
     // add some garbage data to determine where sending starts and where it stops
     command = L"echo \"===adbfsplugin<--\" ;" + command + L" ; echo \"===adbfsplugin-->\"";

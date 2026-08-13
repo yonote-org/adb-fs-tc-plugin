@@ -1,4 +1,4 @@
-VERSION := 1.0.1
+VERSION := 1.0.2
 CXX := clang++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden -fvisibility-inlines-hidden -I.
 BUILD := build
@@ -27,6 +27,7 @@ INTEG_SRCS := tests/test_integration.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS
 SU_SRCS := tests/test_su_hang.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 STOCK_SRCS := tests/test_stock_device.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 WIRELESS_SRCS := tests/test_wireless_device.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
+DISCONNECT_SRCS := tests/test_disconnect_recovery.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 
 $(BUILD)/integration_tests: $(INTEG_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(INTEG_SRCS)
@@ -40,12 +41,16 @@ $(BUILD)/stock_device_test: $(STOCK_SRCS) $(HDRS) tests/harness.h tests/fake_adb
 $(BUILD)/wireless_device_test: $(WIRELESS_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(WIRELESS_SRCS)
 
-test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUILD)/stock_device_test $(BUILD)/wireless_device_test $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
+$(BUILD)/disconnect_recovery_test: $(DISCONNECT_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(DISCONNECT_SRCS)
+
+test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUILD)/stock_device_test $(BUILD)/wireless_device_test $(BUILD)/disconnect_recovery_test $(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 	$(BUILD)/unit_tests
 	$(BUILD)/integration_tests
 	$(BUILD)/su_hang_test
 	$(BUILD)/stock_device_test
 	$(BUILD)/wireless_device_test
+	$(BUILD)/disconnect_recovery_test
 	$(BUILD)/dlopen_test $(BUILD)/adbfsplugin.wfx
 
 # Double Commander's plugin check (GetPluginBinaryType) only accepts THIN
