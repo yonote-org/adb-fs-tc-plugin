@@ -25,16 +25,21 @@ itself cannot access directly (e.g. with root via `su`).
 
 ## Install
 
-### With Homebrew
+### With Homebrew (recommended)
 
 ```sh
-brew install yonote-org/tap/adb-filesystem-doublecommander-plugin
+brew install --cask yonote-org/tap/adb-filesystem-doublecommander-plugin
 ```
 
-The plugin lands at
-`$(brew --prefix)/opt/adb-filesystem-doublecommander-plugin/adbfsplugin.wfx`
-(the right architecture is picked automatically, and `brew upgrade` keeps it
-current). Then register it in Double Commander — see below.
+That's the whole installation: the right architecture is picked
+automatically, the plugin lands at
+`$(brew --prefix)/share/adb-filesystem-doublecommander-plugin/adbfsplugin.wfx`,
+and it **registers itself in Double Commander** (a backup of
+`doublecmd.xml` is kept next to it). Restart Double Commander and enter the
+**Android** entry in the drive list. The only cases needing a hand: if
+Double Commander was running or had never been started, quit it and run
+`brew reinstall --cask adb-filesystem-doublecommander-plugin` to redo the
+registration. `brew upgrade` keeps the plugin current.
 
 ### From a release zip
 

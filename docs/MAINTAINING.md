@@ -186,8 +186,10 @@ Releasing a new version:
 4. Tag `vX.Y.Z`, create the GitHub release with both zips attached, and
    update the Homebrew tap
    ([yonote-org/homebrew-tap](https://github.com/yonote-org/homebrew-tap),
-   `Formula/adb-filesystem-doublecommander-plugin.rb`): bump `version` and
-   both `sha256` values (`shasum -a 256 dist/*.zip`).
+   `Casks/adb-filesystem-doublecommander-plugin.rb`): bump `version` and
+   both `sha256` values (`shasum -a 256 dist/*.zip`). It is a **cask**, not
+   a formula, because its postflight edits `doublecmd.xml` to register the
+   plugin — formula `post_install` runs sandboxed and cannot write there.
 
 ## Licensing and provenance
 
