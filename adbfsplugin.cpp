@@ -123,12 +123,18 @@ DCEXPORT BOOL DCPCALL FsMkDir(char* Path) {
     return FsMkDirW(awfilenamecopy(wbuf, Path));
 }
 
-DCEXPORT int DCPCALL FsExecuteFile(HWND MainWin, char* RemoteName, char* Verb) {
+DCEXPORT int DCPCALL FsExecuteFileW(HWND MainWin, WCHAR* RemoteName, WCHAR* Verb) {
+    // FS_EXEC_YOURSELF makes the commander download the file to its own temp
+    // dir, open it with the default application, and clean the copy up itself
+    if (u16_to_ws(Verb) == L"open") {
+        return FS_EXEC_YOURSELF;
+    }
     return FS_EXEC_ERROR;
 }
 
-DCEXPORT int DCPCALL FsExecuteFileW(HWND MainWin, WCHAR* RemoteName, WCHAR* Verb) {
-    return FS_EXEC_ERROR;
+DCEXPORT int DCPCALL FsExecuteFile(HWND MainWin, char* RemoteName, char* Verb) {
+    WCHAR RemoteNameW[wdirtypemax], VerbW[wdirtypemax];
+    return FsExecuteFileW(MainWin, awfilenamecopy(RemoteNameW, RemoteName), awfilenamecopy(VerbW, Verb));
 }
 
 DCEXPORT int DCPCALL FsRenMovFileW(WCHAR* OldName, WCHAR* NewName, BOOL Move, BOOL OverWrite, RemoteInfoStruct* ri) {

@@ -135,6 +135,22 @@ TEST(end_to_end_against_fake_adb) {
     FsDisconnectW(rpath.data());
 }
 
+TEST(execute_open_delegates_download_to_commander) {
+    // "open" must answer FS_EXEC_YOURSELF: Double Commander then downloads
+    // the file to its temp dir, opens it with the default app, and cleans
+    // the copy up itself — no device round-trip happens in this call.
+    auto path = W(L"\\subdir\\file one");
+    auto open = W(L"open");
+    CHECK_EQ(FsExecuteFileW(NULL, path.data(), open.data()), FS_EXEC_YOURSELF);
+
+    auto props = W(L"properties");
+    CHECK_EQ(FsExecuteFileW(NULL, path.data(), props.data()), FS_EXEC_ERROR);
+
+    char apath[] = "/subdir/file one";
+    char aopen[] = "open";
+    CHECK_EQ(FsExecuteFile(NULL, apath, aopen), FS_EXEC_YOURSELF);
+}
+
 int main() {
     alarm(30);   // hard stop if the protocol deadlocks
     return run_all();
