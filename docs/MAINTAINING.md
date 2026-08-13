@@ -183,6 +183,11 @@ Releasing a new version:
 3. Sanity-check on a real device if the device-facing code changed: connect a
    device with USB debugging, `adb devices`, then browse the **Android** entry
    in Double Commander. The fake server is faithful but it is not a phone.
+4. Tag `vX.Y.Z`, create the GitHub release with both zips attached, and
+   update the Homebrew tap
+   ([yonote-org/homebrew-tap](https://github.com/yonote-org/homebrew-tap),
+   `Formula/adb-filesystem-doublecommander-plugin.rb`): bump `version` and
+   both `sha256` values (`shasum -a 256 dist/*.zip`).
 
 ## Licensing and provenance
 

@@ -1,4 +1,4 @@
-# adbfsplugin for macOS (Double Commander)
+# ADB Filesystem DoubleCommander plugin
 
 Browse an Android device's filesystem from
 [Double Commander](https://doublecmd.sourceforge.io/) on macOS — over ADB, with
@@ -25,8 +25,21 @@ itself cannot access directly (e.g. with root via `su`).
 
 ## Install
 
+### With Homebrew
+
+```sh
+brew install yonote-org/tap/adb-filesystem-doublecommander-plugin
+```
+
+The plugin lands at
+`$(brew --prefix)/opt/adb-filesystem-doublecommander-plugin/adbfsplugin.wfx`
+(the right architecture is picked automatically, and `brew upgrade` keeps it
+current). Then register it in Double Commander — see below.
+
+### From a release zip
+
 1. Download the latest release zip from the
-   [releases page](https://github.com/yonote-org/ADB-Filesystem-DoubleCommander-plugin-for-Mac/releases/latest) —
+   [releases page](https://github.com/yonote-org/adb-filesystem-doublecommander-plugin/releases/latest) —
    or build it yourself with `make dist` (see below).
 2. Pick the zip matching your Mac: `…-arm64.zip` for Apple Silicon,
    `…-x86_64.zip` for Intel (`uname -m` tells you which). The plugin ships as
@@ -35,9 +48,12 @@ itself cannot access directly (e.g. with root via `su`).
 3. Unpack the zip somewhere permanent, e.g.
    `~/Library/Application Support/doublecmd/plugins/wfx/adbfsplugin/`
    (the directory Double Commander's own installer uses).
-4. In Double Commander: **Configuration → Options… → Plugins →
+
+### Register in Double Commander
+
+1. **Configuration → Options… → Plugins →
    File System Plugins (WFX) → Add** — select `adbfsplugin.wfx` — **Apply**.
-5. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
+2. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
    the new **Android** entry.
 
 > Note: unlike Total Commander, Double Commander (verified against the 1.2.8
