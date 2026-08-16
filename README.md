@@ -35,11 +35,14 @@ That's the whole installation: the right architecture is picked
 automatically, the plugin lands at
 `$(brew --prefix)/share/adb-fs-tc-plugin/adb-fs-tc-plugin.wfx`,
 and it **registers itself in Double Commander** (a backup of
-`doublecmd.xml` is kept next to it). Restart Double Commander and enter the
-**Android** entry in the drive list. The only cases needing a hand: if
-Double Commander was running or had never been started, quit it and run
-`brew reinstall --cask adb-fs-tc-plugin` to redo the
-registration. `brew upgrade` keeps the plugin current.
+`doublecmd.xml` is kept next to it). If Double Commander is running it is
+quit gracefully and relaunched around the registration — macOS may show a
+one-time permission prompt for controlling it. Then just enter the
+**Android** entry in the drive list. `brew upgrade` keeps the plugin
+current, and `brew uninstall --cask` deregisters it again. Only if Double
+Commander had never been started (no config yet) or refused to quit does
+registration wait for you: quit it and run
+`brew reinstall --cask adb-fs-tc-plugin`.
 
 ### From a release zip
 
