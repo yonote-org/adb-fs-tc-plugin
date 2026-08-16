@@ -165,7 +165,7 @@ Mechanics:
 ## Building and releasing
 
 ```sh
-make            # native-arch plugin  -> build/adbfsplugin.wfx
+make            # native-arch plugin  -> build/adb-fs-tc-plugin.wfx
 make test       # everything above
 make dist       # tests + thin arm64 & x86_64 zips -> dist/
 make clean
@@ -173,8 +173,8 @@ make clean
 
 `make dist` cross-compiles both architectures (`-arch arm64` / `-arch
 x86_64`), dlopen-checks the native one, header-checks the foreign one, and
-stages `adbfsplugin.wfx` + `pluginst.inf` + `README.md` + `LICENCE` into
-`dist/adbfsplugin-<VERSION>-macos-<arch>.zip`.
+stages `adb-fs-tc-plugin.wfx` + `pluginst.inf` + `README.md` + `LICENCE` into
+`dist/adb-fs-tc-plugin-<VERSION>-macos-<arch>.zip`.
 
 Releasing a new version:
 

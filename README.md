@@ -33,7 +33,7 @@ brew install --cask yonote-org/tap/adb-fs-tc-plugin
 
 That's the whole installation: the right architecture is picked
 automatically, the plugin lands at
-`$(brew --prefix)/share/adb-fs-tc-plugin/adbfsplugin.wfx`,
+`$(brew --prefix)/share/adb-fs-tc-plugin/adb-fs-tc-plugin.wfx`,
 and it **registers itself in Double Commander** (a backup of
 `doublecmd.xml` is kept next to it). Restart Double Commander and enter the
 **Android** entry in the drive list. The only cases needing a hand: if
@@ -51,13 +51,13 @@ registration. `brew upgrade` keeps the plugin current.
    a thin single-architecture binary on purpose — Double Commander's plugin
    check rejects universal (fat) binaries as "This is not a valid plugin!".
 3. Unpack the zip somewhere permanent, e.g.
-   `~/Library/Application Support/doublecmd/plugins/wfx/adbfsplugin/`
+   `~/Library/Application Support/doublecmd/plugins/wfx/adb-fs-tc-plugin/`
    (the directory Double Commander's own installer uses).
 
 ### Register in Double Commander
 
 1. **Configuration → Options… → Plugins →
-   File System Plugins (WFX) → Add** — select `adbfsplugin.wfx` — **Apply**.
+   File System Plugins (WFX) → Add** — select `adb-fs-tc-plugin.wfx` — **Apply**.
 2. Open the drive list (Alt+F1 / Alt+F2) or the network/VFS button and enter
    the new **Android** entry.
 
@@ -83,7 +83,7 @@ Everything is optional, via environment variables:
 ## Building from source
 
 ```sh
-make            # build/adbfsplugin.wfx (native arch)
+make            # build/adb-fs-tc-plugin.wfx (native arch)
 make test       # unit + integration + dlopen loadability tests
 make dist       # run tests and produce per-arch release zips in dist/
 ```

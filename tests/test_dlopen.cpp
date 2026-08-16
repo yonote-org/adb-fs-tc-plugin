@@ -50,7 +50,7 @@ static bool checkThinMacho64(const char* path) {
 
 int main(int argc, char** argv) {
     bool magicOnly = false;
-    const char* path = "build/adbfsplugin.wfx";
+    const char* path = "build/adb-fs-tc-plugin.wfx";
     for (int i = 1; i < argc; i++) {
         if (std::strcmp(argv[i], "--magic-only") == 0) magicOnly = true;
         else path = argv[i];
