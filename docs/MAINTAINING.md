@@ -203,6 +203,10 @@ Releasing a new version:
    both `sha256` values (`shasum -a 256 dist/*.zip`). It is a **cask**, not
    a formula, because its postflight edits `doublecmd.xml` to register the
    plugin — formula `post_install` runs sandboxed and cannot write there.
+   The postflight also strips Homebrew's `com.apple.quarantine` attribute
+   from the installed `.wfx`: the plugin is only ad-hoc (linker-)signed,
+   so Gatekeeper would otherwise block Double Commander's `dlopen` with
+   "blocked to protect your Mac" until manually allowed.
 
 ## Licensing and provenance
 

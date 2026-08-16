@@ -36,8 +36,11 @@ brew install --cask yonote-org/tap/adb-fs-tc-plugin
 That's the whole installation: the right architecture is picked
 automatically, the plugin lands at
 `$(brew --prefix)/share/adb-fs-tc-plugin/adb-fs-tc-plugin.wfx`,
-and it **registers itself in Double Commander** (a backup of
-`doublecmd.xml` is kept next to it). If Double Commander is running it is
+it **registers itself in Double Commander** (a backup of
+`doublecmd.xml` is kept next to it), and Homebrew's Gatekeeper
+quarantine flag is cleared so the plugin loads without a
+"blocked to protect your Mac" prompt (the binary is ad-hoc
+signed, not notarized). If Double Commander is running it is
 quit gracefully and relaunched around the registration — macOS may show a
 one-time permission prompt for controlling it. Then just enter the
 **Android** entry in the drive list. `brew upgrade` keeps the plugin
