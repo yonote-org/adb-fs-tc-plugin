@@ -1,4 +1,4 @@
-VERSION := 1.0.6
+VERSION := 1.0.7
 CXX := clang++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden -fvisibility-inlines-hidden -I.
 BUILD := build
