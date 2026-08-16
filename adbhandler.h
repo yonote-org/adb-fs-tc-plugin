@@ -23,7 +23,6 @@ private:
     ~AdbCommunicator();
     void ReConnect();
     void Close();
-    void SendStringToServer(const char* str);
     int ReadBuf(void);
 
     SOCKET s;
@@ -73,3 +72,15 @@ bool IsErrorMarker(const std::wstring& path);  // <0XXX - ...> pseudo-entry?
 std::list<FileData*>* DirList(std::wstring filename);
 void GetStat(WIN32_FIND_DATAW* fs, FileData* fd);
 bool RunCommand(std::wstring comm);
+
+// Transfer-mode setting, persisted in the commander's wfx.ini (the path
+// FsSetDefaultParams provides). ADBFS_TRANSFER_MODE=sync|shell overrides it.
+enum TransferModeEnum { TRANSFER_SYNC, TRANSFER_SHELL };
+void SetConfigIniPath(const std::string& path);
+TransferModeEnum GetTransferMode();
+void SaveTransferMode(TransferModeEnum mode);
+
+// Native ADB sync-protocol transfers (what adb pull/push speaks), each on its
+// own connection to the adb server. Drive ProgressT and return FS_FILE_*.
+int SyncPull(const std::wstring& remote, const std::wstring& local, int64_t expectedSize);
+int SyncPush(const std::wstring& local, const std::wstring& remote);

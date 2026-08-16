@@ -1,10 +1,10 @@
-VERSION := 1.0.7
+VERSION := 1.1.0
 CXX := clang++
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -fvisibility=hidden -fvisibility-inlines-hidden -I.
 BUILD := build
 
 PLUGIN_SRCS := adbfsplugin.cpp adbhandler.cpp wfxcompat.cpp
-UNIT_SRCS := tests/test_main.cpp tests/test_globals.cpp wfxcompat.cpp adbhandler.cpp
+UNIT_SRCS := tests/test_main.cpp tests/test_globals.cpp tests/test_config.cpp wfxcompat.cpp adbhandler.cpp
 HDRS := platform.h wfxcompat.h adbfsplugin.h adbhandler.h sdk/common.h sdk/wfxplugin.h
 
 .PHONY: all test clean universal dist
@@ -29,6 +29,7 @@ STOCK_SRCS := tests/test_stock_device.cpp tests/fake_adb_server.cpp $(PLUGIN_SRC
 WIRELESS_SRCS := tests/test_wireless_device.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 DISCONNECT_SRCS := tests/test_disconnect_recovery.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 TIMEOUT_SRCS := tests/test_read_timeout.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
+SYNC_SRCS := tests/test_sync_transfer.cpp tests/fake_adb_server.cpp $(PLUGIN_SRCS)
 
 $(BUILD)/integration_tests: $(INTEG_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(INTEG_SRCS)
@@ -48,7 +49,10 @@ $(BUILD)/disconnect_recovery_test: $(DISCONNECT_SRCS) $(HDRS) tests/harness.h te
 $(BUILD)/read_timeout_test: $(TIMEOUT_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
 	$(CXX) $(CXXFLAGS) -o $@ $(TIMEOUT_SRCS)
 
-test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUILD)/stock_device_test $(BUILD)/wireless_device_test $(BUILD)/disconnect_recovery_test $(BUILD)/read_timeout_test $(BUILD)/dlopen_test $(BUILD)/adb-fs-tc-plugin.wfx
+$(BUILD)/sync_transfer_test: $(SYNC_SRCS) $(HDRS) tests/harness.h tests/fake_adb_server.h | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $(SYNC_SRCS)
+
+test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUILD)/stock_device_test $(BUILD)/wireless_device_test $(BUILD)/disconnect_recovery_test $(BUILD)/read_timeout_test $(BUILD)/sync_transfer_test $(BUILD)/dlopen_test $(BUILD)/adb-fs-tc-plugin.wfx
 	$(BUILD)/unit_tests
 	$(BUILD)/integration_tests
 	$(BUILD)/su_hang_test
@@ -56,6 +60,7 @@ test: $(BUILD)/unit_tests $(BUILD)/integration_tests $(BUILD)/su_hang_test $(BUI
 	$(BUILD)/wireless_device_test
 	$(BUILD)/disconnect_recovery_test
 	$(BUILD)/read_timeout_test
+	$(BUILD)/sync_transfer_test
 	$(BUILD)/dlopen_test $(BUILD)/adb-fs-tc-plugin.wfx
 
 # Double Commander's plugin check (GetPluginBinaryType) only accepts THIN

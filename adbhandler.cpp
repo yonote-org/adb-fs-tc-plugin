@@ -138,8 +138,115 @@ int encode64(const char* input, char* output) {
 }
 
 /* ---------------------------
+   ---- Transfer-mode setting -
+   --------------------------- */
+
+// wfx.ini is shared by every WFX plugin, so reads and writes must keep all
+// foreign sections and keys intact.
+static string configIniPath;
+static const char* kIniSection = "[adbfsplugin]";
+static const char* kIniKey = "TransferMode=";
+
+void SetConfigIniPath(const string& path) {
+    configIniPath = path;
+}
+
+static vector<string> readIniLines() {
+    vector<string> lines;
+    FILE* f = fopen(configIniPath.c_str(), "rb");
+    if (!f) return lines;
+    string cur;
+    int c;
+    while ((c = fgetc(f)) != EOF) {
+        if (c == '\n') {
+            lines.push_back(cur);
+            cur.clear();
+        } else if (c != '\r') {
+            cur.push_back((char)c);
+        }
+    }
+    if (!cur.empty()) lines.push_back(cur);
+    fclose(f);
+    return lines;
+}
+
+TransferModeEnum GetTransferMode() {
+    const char* env = getenv("ADBFS_TRANSFER_MODE");
+    if (env && *env) return (string(env) == "shell") ? TRANSFER_SHELL : TRANSFER_SYNC;
+    bool insection = false;
+    for (auto& line : readIniLines()) {
+        string t = trim(line, " \t");
+        if (!t.empty() && t.front() == '[') {
+            insection = (t == kIniSection);
+        } else if (insection && t.compare(0, strlen(kIniKey), kIniKey) == 0) {
+            return (trim(t.substr(strlen(kIniKey)), " \t") == "shell") ? TRANSFER_SHELL : TRANSFER_SYNC;
+        }
+    }
+    return TRANSFER_SYNC;
+}
+
+void SaveTransferMode(TransferModeEnum mode) {
+    string entry = string(kIniKey) + (mode == TRANSFER_SHELL ? "shell" : "sync");
+    vector<string> lines = readIniLines();
+    bool insection = false, written = false;
+    size_t sectionend = lines.size();   // insertion point if the key is absent
+    bool sectionfound = false;
+    for (size_t i = 0; i < lines.size(); i++) {
+        string t = trim(lines[i], " \t");
+        if (!t.empty() && t.front() == '[') {
+            insection = (t == kIniSection);
+            if (insection) sectionfound = true;
+        } else if (insection && !written && t.compare(0, strlen(kIniKey), kIniKey) == 0) {
+            lines[i] = entry;
+            written = true;
+        }
+        if (insection) sectionend = i + 1;
+    }
+    if (!written) {
+        if (!sectionfound) {
+            lines.push_back(kIniSection);
+            lines.push_back(entry);
+        } else {
+            lines.insert(lines.begin() + sectionend, entry);
+        }
+    }
+    // Rewrite atomically: wfx.ini holds every WFX plugin's settings, so a
+    // failed write must never leave it truncated. Write a sibling temp file
+    // and rename() it over the target — resolving a symlinked ini to its
+    // real location first, so the link itself survives.
+    string target = configIniPath;
+    if (char* resolved = realpath(configIniPath.c_str(), NULL)) {
+        target = resolved;
+        free(resolved);
+    }
+    string tmppath = target + ".adbfsplugin.tmp";
+    FILE* f = fopen(tmppath.c_str(), "wb");
+    if (!f) {
+        LogA(MSGTYPE_IMPORTANTERROR, "Could not save transfer mode (wfx.ini directory not writable)");
+        return;
+    }
+    bool ok = true;
+    for (auto& line : lines) {
+        if (fputs(line.c_str(), f) == EOF || fputc('\n', f) == EOF) {
+            ok = false;
+            break;
+        }
+    }
+    if (fclose(f) != 0) ok = false;
+    if (!ok || rename(tmppath.c_str(), target.c_str()) != 0) {
+        unlink(tmppath.c_str());
+        LogA(MSGTYPE_IMPORTANTERROR, "Could not save transfer mode (write to wfx.ini failed)");
+    }
+}
+
+/* ---------------------------
    ---- Adb Communicator -----
    --------------------------- */
+
+// Shared connection primitives, defined in the sync-protocol section below.
+static SOCKET AdbServerConnect();
+static void AdbRequest(SOCKET s, const string& payload);
+static void AdbSelectTransport(SOCKET s);
 
 AdbCommunicator* AdbCommunicator::_global_adb = 0;
 
@@ -211,95 +318,16 @@ void AdbCommunicator::Close() {
     actbufpos = 0;
 }
 
-void AdbCommunicator::SendStringToServer(const char* str) {
-    if (send(s, str, strlen(str), 0) == SOCKET_ERROR) {
-        Close();
-        throw wstring(L"<0009 - could not switch to usb mode>");
-    }
-
-    // get result
-    char recbuf[5];
-    recbuf[4] = '\0';
-    ssize_t bytesRead = recv(s, recbuf, 4, MSG_WAITALL);
-    if (bytesRead != 4) {
-        Close();
-        throw wstring(L"<000A - no ack data from adb server>");
-    }
-    if (strcasecmp("FAIL", recbuf) == 0) {
-        // cleanup
-        recv(s, recbuf, 4, MSG_WAITALL);
-        int datalen = 0;
-        sscanf(recbuf, "%x", &datalen);
-        if (datalen > 0) {
-            char* data = new char[datalen + 1];
-            recv(s, data, datalen, MSG_WAITALL);
-            delete[] data;
-        }
-        Close();
-        throw wstring(L"<000B - FAIL response from adb server>");
-    } else if (strcasecmp("OKAY", recbuf) != 0) {
-        Close();
-        throw wstring(L"<000C - Bad response from adb server>");
-    }
-}
-
 void AdbCommunicator::ReConnect() {
     LogA(MSGTYPE_CONNECT, "CONNECT /");
-    struct addrinfo* result = NULL;
-    struct addrinfo hints;
-    ZeroMemory(&hints, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    const char* port = getenv("ANDROID_ADB_SERVER_PORT");
-    if (!port || !*port) port = "5037";
-
-    if (getaddrinfo("127.0.0.1", port, &hints, &result) != 0) {
-        throw wstring(L"<0007 - localhost not found>");
-    }
-    s = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
-    if (s == INVALID_SOCKET) {
-        freeaddrinfo(result);
-        throw wstring(L"<0006 - socket initialization failed>");
-    }
-    if (connect(s, result->ai_addr, result->ai_addrlen) == SOCKET_ERROR) {
-        freeaddrinfo(result);
+    s = AdbServerConnect();
+    try {
+        AdbSelectTransport(s);
+        AdbRequest(s, "shell:");
+    } catch (wstring&) {
         Close();
-        throw wstring(L"<0008 - could not connect to local adb server>");
+        throw;
     }
-    freeaddrinfo(result);
-
-    // Inactivity timeout on reads: a silently-dead device link (Wi-Fi gone
-    // without the adb server noticing) must error out instead of blocking
-    // DC's UI thread in recv forever. ADBFS_READ_TIMEOUT seconds overrides
-    // the default; 0 disables — needed if silent long-running commands
-    // (a huge rm -r / cp) legitimately produce no output for longer.
-    int rcvsecs = 30;
-    const char* toenv = getenv("ADBFS_READ_TIMEOUT");
-    if (toenv && *toenv) rcvsecs = atoi(toenv);
-    if (rcvsecs > 0) {
-        TIMEVAL rcvto;
-        rcvto.tv_sec = rcvsecs;
-        rcvto.tv_usec = 0;
-        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
-    }
-
-    // Select the device: ADBFS_SERIAL pins a specific one (needed with
-    // several devices attached); otherwise transport-any takes the single
-    // connected device whatever its transport — USB or wireless TCP
-    // (transport-usb would FAIL for wireless devices).
-    const char* serial = getenv("ADBFS_SERIAL");
-    if (serial && *serial) {
-        std::string req = std::string("host:transport:") + serial;
-        char msg[wdirtypemax];
-        snprintf(msg, sizeof(msg), "%04x%s", (unsigned)req.size(), req.c_str());
-        SendStringToServer(msg);
-    } else {
-        SendStringToServer("0012host:transport-any");
-    }
-    // start shell
-    SendStringToServer("0006shell:");
 
     if (_needsu) {
         Sleep(500);         // let the shell start
@@ -420,6 +448,281 @@ wstring* AdbCommunicator::ReadLineW() {
     if (input == NULL) return NULL;
     wstring* result = new wstring(utf8_to_ws(*input));
     delete input;
+    return result;
+}
+
+/* ---------------------------
+   ---- ADB sync protocol ----
+   --------------------------- */
+
+// The sync service transfers file bodies the way adb pull/push does: binary
+// frames of 4-byte id + little-endian uint32 length, DATA payloads capped at
+// 64 KB. Each transfer uses its own connection so the interactive shell
+// stays undisturbed.
+#define SYNC_DATA_MAX 65536
+
+static bool SendAllRaw(SOCKET s, const void* data, size_t n) {
+    const char* p = (const char*)data;
+    while (n > 0) {
+        ssize_t w = send(s, p, n, 0);
+        if (w <= 0) return false;
+        p += w;
+        n -= (size_t)w;
+    }
+    return true;
+}
+
+static bool RecvAllRaw(SOCKET s, void* data, size_t n) {
+    char* p = (char*)data;
+    while (n > 0) {
+        ssize_t r = recv(s, p, n, 0);
+        if (r <= 0) return false;
+        p += r;
+        n -= (size_t)r;
+    }
+    return true;
+}
+
+// Connect to the local ADB server.
+// The inactivity timeout on reads: a silently-dead device link (Wi-Fi gone
+// without the adb server noticing) must error out instead of blocking DC's
+// UI thread in recv forever. ADBFS_READ_TIMEOUT seconds overrides the
+// default; 0 disables — needed if silent long-running commands (a huge
+// rm -r / cp) legitimately produce no output for longer.
+// SO_NOSIGPIPE: a peer dying mid-send must surface as an error, not kill
+// the commander with SIGPIPE.
+static SOCKET AdbServerConnect() {
+    struct addrinfo* result = NULL;
+    struct addrinfo hints;
+    ZeroMemory(&hints, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    const char* port = getenv("ANDROID_ADB_SERVER_PORT");
+    if (!port || !*port) port = "5037";
+    if (getaddrinfo("127.0.0.1", port, &hints, &result) != 0) {
+        throw wstring(L"<0007 - localhost not found>");
+    }
+    SOCKET s = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (s == INVALID_SOCKET) {
+        freeaddrinfo(result);
+        throw wstring(L"<0006 - socket initialization failed>");
+    }
+    if (connect(s, result->ai_addr, result->ai_addrlen) == SOCKET_ERROR) {
+        freeaddrinfo(result);
+        closesocket(s);
+        throw wstring(L"<0008 - could not connect to local adb server>");
+    }
+    freeaddrinfo(result);
+    int rcvsecs = 30;
+    const char* toenv = getenv("ADBFS_READ_TIMEOUT");
+    if (toenv && *toenv) rcvsecs = atoi(toenv);
+    if (rcvsecs > 0) {
+        TIMEVAL rcvto;
+        rcvto.tv_sec = rcvsecs;
+        rcvto.tv_usec = 0;
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvto, sizeof(rcvto));
+        // and on sends: a wedged link mid-upload fills the socket buffer and
+        // send() would otherwise block the commander's UI thread forever
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &rcvto, sizeof(rcvto));
+    }
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
+    return s;
+}
+
+// One smart-socket request: <4-hex-len><payload>, expect OKAY.
+static void AdbRequest(SOCKET s, const string& payload) {
+    char lenbuf[8];
+    snprintf(lenbuf, sizeof(lenbuf), "%04x", (unsigned)payload.size());
+    string req = string(lenbuf) + payload;
+    if (!SendAllRaw(s, req.data(), req.size())) {
+        throw wstring(L"<000D - Command send failed>");
+    }
+    char recbuf[5] = {0};
+    if (recv(s, recbuf, 4, MSG_WAITALL) != 4) {
+        throw wstring(L"<000A - no ack data from adb server>");
+    }
+    if (strcasecmp("FAIL", recbuf) == 0) {
+        throw wstring(L"<000B - FAIL response from adb server>");
+    }
+    if (strcasecmp("OKAY", recbuf) != 0) {
+        throw wstring(L"<000C - Bad response from adb server>");
+    }
+}
+
+// Select the device: ADBFS_SERIAL pins a specific one (needed with several
+// devices attached); otherwise transport-any takes the single connected
+// device whatever its transport — USB or wireless TCP (transport-usb would
+// FAIL for wireless devices).
+static void AdbSelectTransport(SOCKET s) {
+    const char* serial = getenv("ADBFS_SERIAL");
+    if (serial && *serial) {
+        AdbRequest(s, string("host:transport:") + serial);
+    } else {
+        AdbRequest(s, "host:transport-any");
+    }
+}
+
+static bool SyncSendHeader(SOCKET s, const char* id, uint32_t len) {
+    char hdr[8];
+    memcpy(hdr, id, 4);
+    memcpy(hdr + 4, &len, 4);   // little-endian on every supported arch
+    return SendAllRaw(s, hdr, 8);
+}
+
+static bool SyncSendFrame(SOCKET s, const char* id, const string& payload) {
+    return SyncSendHeader(s, id, (uint32_t)payload.size()) &&
+           SendAllRaw(s, payload.data(), payload.size());
+}
+
+// Drain a FAIL payload (the device's error text) into the log.
+static void SyncLogFail(SOCKET s, uint32_t len) {
+    if (len > 4096) len = 4096;
+    string msg(len, 0);
+    if (len == 0 || !RecvAllRaw(s, &msg[0], len)) msg = "(no error message)";
+    wstring wmsg = L"sync: " + utf8_to_ws(msg);
+    if (msg.find("ermission") != string::npos)
+        wmsg += L" - the device-shell transfer mode (plugin Configure button) can reach root-only files";
+    LogT(MSGTYPE_IMPORTANTERROR, wmsg);
+}
+
+// Open a sync-service connection ready for RECV/SEND requests.
+static SOCKET SyncConnect() {
+    SOCKET s = AdbServerConnect();
+    try {
+        AdbSelectTransport(s);
+        AdbRequest(s, "sync:");
+    } catch (wstring&) {
+        closesocket(s);
+        throw;
+    }
+    return s;
+}
+
+int SyncPull(const wstring& remote, const wstring& local, int64_t expectedSize) {
+    string local8 = ws_to_utf8(local);
+    SOCKET s;
+    try {
+        s = SyncConnect();
+    } catch (wstring& e) {
+        LogT(MSGTYPE_IMPORTANTERROR, e);
+        return FS_FILE_READERROR;
+    }
+    FILE* f = fopen(local8.c_str(), "wb");
+    if (f == NULL) {
+        closesocket(s);
+        return FS_FILE_WRITEERROR;
+    }
+    int result = FS_FILE_READERROR;
+    if (expectedSize <= 0) expectedSize = 1;
+    int64_t saved = 0;
+    ProgressT(remote, local, 0);
+    if (SyncSendFrame(s, "RECV", ws_to_utf8(PathConverter(remote)))) {
+        char buf[SYNC_DATA_MAX];
+        for (;;) {
+            char id[4];
+            uint32_t len = 0;
+            if (!RecvAllRaw(s, id, 4) || !RecvAllRaw(s, &len, 4)) {
+                LogT(MSGTYPE_IMPORTANTERROR, L"sync: connection lost during download");
+                break;
+            }
+            if (memcmp(id, "DONE", 4) == 0) {
+                SyncSendHeader(s, "QUIT", 0);
+                ProgressT(remote, local, 100);
+                result = FS_FILE_OK;
+                break;
+            }
+            if (memcmp(id, "FAIL", 4) == 0) {
+                SyncLogFail(s, len);
+                break;
+            }
+            if (memcmp(id, "DATA", 4) != 0 || len > SYNC_DATA_MAX) {
+                LogT(MSGTYPE_IMPORTANTERROR, L"sync: unexpected response from device");
+                break;
+            }
+            if (!RecvAllRaw(s, buf, len)) {
+                LogT(MSGTYPE_IMPORTANTERROR, L"sync: connection lost during download");
+                break;
+            }
+            if (fwrite(buf, 1, len, f) != len) {
+                result = FS_FILE_WRITEERROR;
+                break;
+            }
+            saved += len;
+            // a stale listing size must not push >100 to the commander
+            int pct = (int)((double)saved / expectedSize * 100);
+            if (ProgressT(remote, local, pct > 100 ? 100 : pct)) {
+                result = FS_FILE_USERABORT;
+                break;
+            }
+        }
+    }
+    closesocket(s);
+    fclose(f);
+    if (result != FS_FILE_OK) unlink(local8.c_str());   // no partial downloads
+    return result;
+}
+
+int SyncPush(const wstring& local, const wstring& remote) {
+    string local8 = ws_to_utf8(local);
+    struct stat st;
+    if (stat(local8.c_str(), &st) != 0) return FS_FILE_READERROR;
+    FILE* f = fopen(local8.c_str(), "rb");
+    if (f == NULL) return FS_FILE_READERROR;
+    SOCKET s;
+    try {
+        s = SyncConnect();
+    } catch (wstring& e) {
+        LogT(MSGTYPE_IMPORTANTERROR, e);
+        fclose(f);
+        return FS_FILE_WRITEERROR;
+    }
+    int result = FS_FILE_WRITEERROR;
+    int64_t fullsize = (st.st_size > 0) ? (int64_t)st.st_size : 1;
+    int64_t sent = 0;
+    ProgressT(local, remote, 0);
+    string arg = ws_to_utf8(PathConverter(remote)) + "," + std::to_string((unsigned)st.st_mode);
+    if (SyncSendFrame(s, "SEND", arg)) {
+        char buf[SYNC_DATA_MAX];
+        bool aborted = false, senderr = false;
+        size_t n;
+        while ((n = fread(buf, 1, SYNC_DATA_MAX, f)) > 0) {
+            if (!SyncSendHeader(s, "DATA", (uint32_t)n) || !SendAllRaw(s, buf, n)) {
+                senderr = true;   // adbd may FAIL early and close its read side
+                break;
+            }
+            sent += n;
+            // a file growing mid-push must not push >100 to the commander
+            int pct = (int)((double)sent / fullsize * 100);
+            if (ProgressT(local, remote, pct > 100 ? 100 : pct)) {
+                aborted = true;
+                break;
+            }
+        }
+        if (aborted) {
+            result = FS_FILE_USERABORT;
+        } else {
+            if (!senderr) SyncSendHeader(s, "DONE", (uint32_t)st.st_mtime);
+            char id[4];
+            uint32_t len = 0;
+            if (!RecvAllRaw(s, id, 4) || !RecvAllRaw(s, &len, 4)) {
+                LogT(MSGTYPE_IMPORTANTERROR, L"sync: no final status from device");
+            } else if (memcmp(id, "OKAY", 4) == 0) {
+                SyncSendHeader(s, "QUIT", 0);
+                ProgressT(local, remote, 100);
+                result = FS_FILE_OK;
+            } else if (memcmp(id, "FAIL", 4) == 0) {
+                SyncLogFail(s, len);
+            } else {
+                LogT(MSGTYPE_IMPORTANTERROR, L"sync: unexpected response from device");
+            }
+        }
+    }
+    closesocket(s);
+    fclose(f);
     return result;
 }
 

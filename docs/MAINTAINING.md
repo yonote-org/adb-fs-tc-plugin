@@ -11,7 +11,7 @@ it safely.
 |---|---|
 | `adbfsplugin.cpp` | All WFX entry points (`FsInit`, `FsFindFirst`, `FsGetFile`, …) plus the content-plugin (custom columns) API. No device logic — it delegates to `adbhandler`. |
 | `adbfsplugin.h` | Externs for the plugin-global callback pointers (`ProgressProcW`, `LogProcW`, …) registered in `FsInit/FsInitW`. |
-| `adbhandler.cpp/.h` | Everything device-side: `AdbCommunicator` (socket to the ADB server, shell session), `DirList`/`FillStat`/`GetStat` (listing + stat), `ParseStatLine`, base64 codec, helpers (`QuoteString`, `StripAnsiEscapes`, `FindAdbBinary`, `Tool`). |
+| `adbhandler.cpp/.h` | Everything device-side: `AdbCommunicator` (socket to the ADB server, shell session), `SyncPull`/`SyncPush` (native sync-protocol transfers), the transfer-mode setting (`GetTransferMode`/`SaveTransferMode`, wfx.ini persistence), `DirList`/`FillStat`/`GetStat` (listing + stat), `ParseStatLine`, base64 codec, helpers (`QuoteString`, `StripAnsiEscapes`, `FindAdbBinary`, `Tool`). |
 | `wfxcompat.cpp/.h` | String/ABI compatibility: UTF-16 (`WCHAR`, the plugin ABI) ↔ `std::wstring` (UTF-32 on macOS) ↔ UTF-8, truncation-safe fixed-buffer variants, and `ProgressT`/`LogT`/`LogA` wrappers that tolerate either callback set being NULL. |
 | `platform.h` | POSIX includes, small Win32 shims (`Sleep`, `SOCKET`, `ZeroMemory`), and the single sanctioned include of the SDK headers. Include this, never `sdk/wfxplugin.h` directly (it has no include guard). |
 | `sdk/` | Vendored Double Commander plugin SDK headers (from github.com/doublecmd/doublecmd). Defines the Unix WFX ABI. Do not edit; re-vendor to update. |
@@ -95,10 +95,22 @@ Two hard packaging rules that follow from Double Commander's loader:
   `busybox echo adbfsprobe`, then `toybox echo adbfsprobe`, else plain
   applets — and `Tool(L"ls")` prefixes commands accordingly. Mode 0 =
   busybox, 1 = toybox, 2 = bare shell applets.
-- **Transfers:** downloads run `uuencode -m` (busybox) or `base64` (toybox)
+- **Transfers:** two modes, dispatched in `FsGetFileW`/`FsPutFileW` on
+  `GetTransferMode()`. The default **sync** mode speaks the ADB sync service
+  (`SyncPull`/`SyncPush`): its own connection to the adb server
+  (`host:transport*`, then `sync:`), binary frames of 4-byte id +
+  little-endian uint32 length, `DATA` payloads up to 64 KB, `DONE`/`OKAY`/
+  `FAIL` status — exactly what `adb pull/push` uses, so same speed, but it
+  runs with adbd's permissions (no `su`): root-only paths FAIL with a
+  permission error. The **shell** mode is the original in-band transfer:
+  downloads run `uuencode -m` (busybox) or `base64` (toybox)
   on the device and decode locally; uploads encode locally and pipe into
   `uudecode` / `base64 -d` on the device, terminated by `====` framing or a
-  `^D` at line start. Errors are thrown as `std::wstring` markers like
+  `^D` at line start. The mode is stored as `TransferMode=sync|shell` under
+  `[adbfsplugin]` in the commander's shared `wfx.ini` (path delivered by
+  `FsSetDefaultParams`), edited via the Configure button —
+  `FsExecuteFile(root, "properties")` — and overridable with
+  `ADBFS_TRANSFER_MODE`. Errors are thrown as `std::wstring` markers like
   `<000B - FAIL response from adb server>` — caught at the entry-point layer
   and either returned as `FS_FILE_*` codes or, in listings, surfaced as a
   pseudo-file with the marker as its name (upstream's convention). Those
@@ -138,13 +150,14 @@ needed (`FindAdbBinary` failures are non-fatal by design).
 
 | Binary | Sources | What it covers |
 |---|---|---|
-| `unit_tests` | `test_main.cpp`, `test_globals.cpp` | Pure-function coverage: UTF conversions and truncation edges, base64 codec, `QuoteString`, `ParseStatLine` (incl. malformed input), `GetStat` field mapping, `StripAnsiEscapes`, `FindAdbBinary` env override, callback-wrapper fallbacks. |
-| `integration_tests` | `test_integration.cpp` | Full plugin lifecycle against `FakeAdbServer`: connect, list, stat, download, upload, verifying both the results and the exact shell commands sent. |
+| `unit_tests` | `test_main.cpp`, `test_globals.cpp`, `test_config.cpp` | Pure-function coverage: UTF conversions and truncation edges, base64 codec, `QuoteString`, `ParseStatLine` (incl. malformed input), `GetStat` field mapping, `StripAnsiEscapes`, `FindAdbBinary` env override, callback-wrapper fallbacks, transfer-mode setting (ini round-trip, env override, foreign-section preservation). |
+| `integration_tests` | `test_integration.cpp` | Full plugin lifecycle against `FakeAdbServer`: connect, list, stat, download, upload (pinned to shell transfer mode — that machinery is what it verifies), checking both the results and the exact shell commands sent. |
 | `su_hang_test` | `test_su_hang.cpp` | Regression: the su handshake must not deadlock when the device answers within the drain window. |
 | `stock_device_test` | `test_stock_device.cpp` | The no-busybox path: toybox fallback for listing, stat and transfers. |
 | `wireless_device_test` | `test_wireless_device.cpp` | Wireless (TCP) devices: the server FAILs `host:transport-usb`, so the plugin must select via `host:transport-any`, and `ADBFS_SERIAL` must pin a specific serial. |
 | `disconnect_recovery_test` | `test_disconnect_recovery.cpp` | Regression: when the device vanishes mid-session the drain loop must notice EOF instead of spinning select/recv forever on the UI thread, and the next listing must reconnect. |
 | `read_timeout_test` | `test_read_timeout.cpp` | Regression: a device that goes silent while the TCP link stays up must hit the `ADBFS_READ_TIMEOUT` inactivity window instead of blocking `recv` forever. |
+| `sync_transfer_test` | `test_sync_transfer.cpp` | Transfer modes: default downloads/uploads speak the sync protocol (shell connection open concurrently), FAIL surfaces as the right `FS_FILE_*` code with no partial file left, shell mode still routes through the device shell, and the Configure dialog (`properties` verb on the root) persists the choice to wfx.ini. |
 | `dlopen_test` | `test_dlopen.cpp` | Loads the built `.wfx` with `dlopen` and resolves every export in its `kExports` list — catches missing symbols and ABI breaks. `--magic-only` variant checks the Mach-O header of a foreign-arch build. |
 
 Mechanics:

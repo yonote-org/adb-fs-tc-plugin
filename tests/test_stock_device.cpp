@@ -33,6 +33,9 @@ TEST(stock_device_listing_and_transfers) {
     setenv("ANDROID_ADB_SERVER_PORT", portstr, 1);
     setenv("ADBFS_ADB", "/usr/bin/true", 1);
     setenv("ADBFS_NO_SU", "1", 1);   // su timing is covered by test_su_hang
+    // the toybox base64-through-shell transfer variant is under test here;
+    // the default sync-protocol mode is covered by test_sync_transfer
+    setenv("ADBFS_TRANSFER_MODE", "shell", 1);
 
     CHECK_EQ(FsInitW(3, progW, logW, reqW), 0);
 
@@ -124,6 +127,7 @@ TEST(stock_device_listing_and_transfers) {
     CHECK(hasCommand(server, "toybox base64 -d > '/up.txt'"));
 
     FsDisconnectW(rpath.data());
+    unsetenv("ADBFS_TRANSFER_MODE");
 }
 
 int main() {

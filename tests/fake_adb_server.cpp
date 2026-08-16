@@ -73,6 +73,11 @@ FakeAdbServer::FakeAdbServer(bool stock, bool wireless) : stock_(stock), wireles
 FakeAdbServer::~FakeAdbServer() {
     stop_ = true;
     if (listen_fd_ >= 0) { shutdown(listen_fd_, SHUT_RDWR); close(listen_fd_); }
+    {
+        // unblock any worker still stuck in recv on a live connection
+        std::lock_guard<std::mutex> lk(mu_);
+        for (int fd : open_fds_) shutdown(fd, SHUT_RDWR);
+    }
     if (thread_.joinable()) thread_.join();
 }
 
@@ -91,16 +96,41 @@ std::vector<std::string> FakeAdbServer::transports() {
     return transports_;
 }
 
+std::vector<std::string> FakeAdbServer::syncRequests() {
+    std::lock_guard<std::mutex> lk(mu_);
+    return sync_requests_;
+}
+
+std::string FakeAdbServer::syncUploaded() {
+    std::lock_guard<std::mutex> lk(mu_);
+    return sync_uploaded_;
+}
+
 void FakeAdbServer::run() {
+    std::vector<std::thread> workers;
     while (!stop_) {
         int fd = accept(listen_fd_, nullptr, nullptr);
-        if (fd < 0) return;
-        rbuf_.clear();
+        if (fd < 0) break;
         conn_fd_ = fd;
-        serveConnection(fd);
-        conn_fd_ = -1;
-        close(fd);
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            open_fds_.push_back(fd);
+        }
+        workers.emplace_back([this, fd] {
+            serveConnection(fd);
+            int expected = fd;
+            conn_fd_.compare_exchange_strong(expected, -1);   // clear only if still current
+            {
+                // unregister before close: the destructor must never shut
+                // down an fd number this thread has already released
+                std::lock_guard<std::mutex> lk(mu_);
+                for (auto it = open_fds_.begin(); it != open_fds_.end(); ++it)
+                    if (*it == fd) { open_fds_.erase(it); break; }
+            }
+            close(fd);
+        });
     }
+    for (auto& w : workers) w.join();
 }
 
 void FakeAdbServer::dropConnection() {
@@ -121,8 +151,19 @@ void FakeAdbServer::sendAll(int fd, const std::string& data) {
     }
 }
 
+bool FakeAdbServer::readN(int fd, void* buf, size_t n) {
+    size_t off = 0;
+    while (off < n) {
+        ssize_t r = recv(fd, (char*)buf + off, n - off, 0);
+        if (r <= 0) return false;
+        off += (size_t)r;
+    }
+    return true;
+}
+
 // smart-socket phase: <4 hex chars length><payload>
 void FakeAdbServer::serveConnection(int fd) {
+    std::string rbuf;
     for (;;) {
         char lenbuf[5] = {0};
         ssize_t n = recv(fd, lenbuf, 4, MSG_WAITALL);
@@ -142,7 +183,11 @@ void FakeAdbServer::serveConnection(int fd) {
             sendAll(fd, "OKAY");
         } else if (payload == "shell:") {
             sendAll(fd, "OKAY");
-            shellSession(fd);
+            shellSession(fd, &rbuf);
+            return;
+        } else if (payload == "sync:") {
+            sendAll(fd, "OKAY");
+            syncSession(fd);
             return;
         } else {
             sendAll(fd, "FAIL0013unknown fake request");
@@ -151,25 +196,97 @@ void FakeAdbServer::serveConnection(int fd) {
     }
 }
 
-bool FakeAdbServer::readLine(int fd, std::string* line) {
+// binary sync-service frame: 4-byte id + little-endian uint32 length
+void FakeAdbServer::sendSyncHeader(int fd, const char* id, unsigned len) {
+    char hdr[8];
+    memcpy(hdr, id, 4);
+    memcpy(hdr + 4, &len, 4);
+    sendAll(fd, std::string(hdr, 8));
+}
+
+void FakeAdbServer::sendSyncFrame(int fd, const char* id, const std::string& payload) {
+    sendSyncHeader(fd, id, (unsigned)payload.size());
+    sendAll(fd, payload);
+}
+
+void FakeAdbServer::syncSession(int fd) {
     for (;;) {
-        size_t nl = rbuf_.find('\n');
+        char id[4];
+        unsigned len = 0;
+        if (!readN(fd, id, 4) || !readN(fd, &len, 4)) return;
+        std::string sid(id, 4);
+        if (sid == "QUIT") return;
+        std::string arg(len, 0);
+        if (len && !readN(fd, &arg[0], len)) return;
+        if (sid == "RECV") {
+            {
+                std::lock_guard<std::mutex> lk(mu_);
+                sync_requests_.push_back("RECV " + arg);
+            }
+            if (arg.find("denied") != std::string::npos) {
+                sendSyncFrame(fd, "FAIL", "Permission denied");
+                return;
+            }
+            // two DATA frames so the client's reassembly is exercised
+            sendSyncFrame(fd, "DATA", "hello ");
+            sendSyncFrame(fd, "DATA", "adbfs!");
+            sendSyncHeader(fd, "DONE", 1700000001u);
+        } else if (sid == "SEND") {
+            {
+                std::lock_guard<std::mutex> lk(mu_);
+                sync_requests_.push_back("SEND " + arg);
+            }
+            if (arg.find("stall") != std::string::npos) {
+                // wedged device: accepts the request, then never reads the
+                // data — the client's socket buffer fills and send() blocks
+                while (!stop_) usleep(50000);
+                return;
+            }
+            std::string data;
+            for (;;) {
+                char cid[4];
+                unsigned clen = 0;
+                if (!readN(fd, cid, 4) || !readN(fd, &clen, 4)) return;
+                std::string scid(cid, 4);
+                if (scid == "DONE") break;   // clen carries the mtime
+                if (scid != "DATA") return;
+                std::string chunk(clen, 0);
+                if (clen && !readN(fd, &chunk[0], clen)) return;
+                data += chunk;
+            }
+            {
+                std::lock_guard<std::mutex> lk(mu_);
+                sync_uploaded_ = data;
+            }
+            if (arg.find("denied") != std::string::npos)
+                sendSyncFrame(fd, "FAIL", "Permission denied");
+            else
+                sendSyncHeader(fd, "OKAY", 0);
+        } else {
+            return;
+        }
+    }
+}
+
+bool FakeAdbServer::readLine(int fd, std::string* line, std::string* rbuf) {
+    for (;;) {
+        size_t nl = rbuf->find('\n');
         if (nl != std::string::npos) {
-            *line = rbuf_.substr(0, nl);
-            rbuf_.erase(0, nl + 1);
+            *line = rbuf->substr(0, nl);
+            rbuf->erase(0, nl + 1);
             if (!line->empty() && line->back() == '\r') line->pop_back();
             return true;
         }
         char buf[4096];
         ssize_t n = recv(fd, buf, sizeof(buf), 0);
         if (n <= 0) return false;
-        rbuf_.append(buf, (size_t)n);
+        rbuf->append(buf, (size_t)n);
     }
 }
 
-void FakeAdbServer::shellSession(int fd) {
+void FakeAdbServer::shellSession(int fd, std::string* rbuf) {
     std::string line;
-    while (readLine(fd, &line)) {
+    while (readLine(fd, &line, rbuf)) {
         if (silent_) continue;   // wedged device: reads everything, answers nothing
         if (line == "su") {
             sendAll(fd, "# ");
@@ -188,12 +305,12 @@ void FakeAdbServer::shellSession(int fd) {
         }
         sendAll(fd, line + "\r\n");             // pty echo, discarded by the plugin
         sendAll(fd, "===adbfsplugin<--\n");
-        handleShellCommand(fd, cmd);
+        handleShellCommand(fd, cmd, rbuf);
         sendAll(fd, "===adbfsplugin-->\n");
     }
 }
 
-void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
+void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd, std::string* rbuf) {
     if (stock_) {
         if (cmd.rfind("busybox", 0) == 0) {
             sendAll(fd, "/system/bin/sh: busybox: inaccessible or not found\n");
@@ -228,7 +345,7 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
             sendAll(fd, out);
         } else if (cmd.rfind("toybox base64 -d > ", 0) == 0) {
             std::string data, l;
-            while (readLine(fd, &l)) {
+            while (readLine(fd, &l, rbuf)) {
                 if (l == "\x04") break;
                 data += l;
                 data += '\n';
@@ -267,7 +384,7 @@ void FakeAdbServer::handleShellCommand(int fd, const std::string& cmd) {
     } else if (cmd.rfind("busybox uudecode ", 0) == 0) {
         // consume the in-band upload until the plugin's EOT marker
         std::string data, l;
-        while (readLine(fd, &l)) {
+        while (readLine(fd, &l, rbuf)) {
             if (l == "====\x04") break;
             data += l;
             data += '\n';

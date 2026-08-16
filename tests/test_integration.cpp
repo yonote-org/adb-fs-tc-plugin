@@ -26,6 +26,9 @@ TEST(end_to_end_against_fake_adb) {
     setenv("ANDROID_ADB_SERVER_PORT", portstr, 1);
     setenv("ADBFS_ADB", "/usr/bin/true", 1);
     setenv("ADBFS_NO_SU", "1", 1);
+    // the base64-through-shell transfer machinery is under test here;
+    // the default sync-protocol mode is covered by test_sync_transfer
+    setenv("ADBFS_TRANSFER_MODE", "shell", 1);
 
     CHECK_EQ(FsInitW(7, progW, logW, reqW), 0);
 
@@ -133,6 +136,7 @@ TEST(end_to_end_against_fake_adb) {
     }
 
     FsDisconnectW(rpath.data());
+    unsetenv("ADBFS_TRANSFER_MODE");
 }
 
 TEST(execute_open_delegates_download_to_commander) {

@@ -10,9 +10,11 @@ filesystem. Double-clicking a file opens it in its default macOS application
 
 The plugin talks to the local ADB server, opens a shell on the device, and
 drives it with `busybox` commands (falling back to stock Android's `toybox`
-applets automatically). File transfers run in-band through the shell,
-base64-encoded — slower than `adb pull/push`, but they work even on paths adb
-itself cannot access directly (e.g. with root via `su`).
+applets automatically). File transfers use the native ADB **sync protocol** —
+the same thing `adb pull/push` speaks, at the same speed. A configurable
+alternative mode runs transfers in-band through the shell, base64-encoded —
+slower, but it works even on paths adb itself cannot access directly (e.g.
+with root via `su`); see [Configuration](#configuration).
 
 ## Requirements
 
@@ -73,7 +75,24 @@ registration wait for you: quit it and run
 
 ## Configuration
 
-Everything is optional, via environment variables:
+### Transfer mode
+
+File transfers have two modes, chosen with the **Configure** button next to
+the plugin in **Configuration → Options… → Plugins → File System Plugins
+(WFX)**:
+
+- **Sync protocol** (default) — the native ADB sync service, exactly what
+  `adb pull/push` uses; fast, with working progress and cancel.
+- **Device shell** — transfers run in-band through the device shell,
+  base64-encoded. Slower, but on a rooted device (`su`) it reaches files the
+  adb daemon itself may not access, e.g. under `/data`.
+
+The choice is stored in Double Commander's `wfx.ini`. If a sync transfer
+fails with a permission error, switch to device-shell mode for that file.
+
+### Environment variables
+
+Everything else is optional, via environment variables:
 
 | Variable | Meaning |
 |---|---|
@@ -82,6 +101,7 @@ Everything is optional, via environment variables:
 | `ADBFS_SERIAL` | Serial of the device to use (as shown by `adb devices`), for when several devices are attached. Default: the single connected device, USB or wireless |
 | `ADBFS_NO_SU` | If set, never run `su` after connecting (for unrooted devices) |
 | `ADBFS_READ_TIMEOUT` | Seconds of read inactivity before giving up on the device (default `30`, `0` disables). Raise it if silent long-running operations — a huge `rm -r` or `cp` — legitimately produce no output for longer |
+| `ADBFS_TRANSFER_MODE` | `sync` or `shell`: overrides the configured transfer mode (see above) |
 
 ## Building from source
 
@@ -101,8 +121,11 @@ conventions, test layout and release process.
 - One device at a time. USB and wireless (TCP) connections both work; with
   several devices attached at once, set `ADBFS_SERIAL` to pick one.
 - No `FsSetTime` / `FsSetAttr` (timestamps and permissions cannot be edited).
-- Transfers are slower than `adb pull/push` because they run base64-encoded
-  through the device shell.
+- In the default sync transfer mode, files only the root user can read (e.g.
+  under `/data`) fail with a permission error — switch to the device-shell
+  transfer mode for those (see [Configuration](#configuration)).
+- In device-shell transfer mode, transfers are slower than `adb pull/push`
+  because they run base64-encoded through the device shell.
 
 ## Credits and license
 

@@ -7,7 +7,10 @@
 
 // Minimal in-process stand-in for the local ADB server plus a device shell.
 // Speaks just enough of the smart-socket protocol for adbfsplugin:
-//   <4-hex-len><payload> requests, OKAY responses, then a line-based shell.
+//   <4-hex-len><payload> requests, OKAY responses, then a line-based shell
+//   or the binary sync service (what adb pull/push uses).
+// Each accepted connection gets its own thread: the plugin keeps its shell
+// connection open while sync transfers run on separate connections.
 class FakeAdbServer {
 public:
     // stock=true emulates a modern stock Android device: no busybox
@@ -22,16 +25,22 @@ public:
     std::vector<std::string> commands();   // device shell commands, marker framing stripped
     std::string uploaded();                // raw lines captured after a uudecode command
     std::vector<std::string> transports(); // host:transport* requests received
+    std::vector<std::string> syncRequests(); // "RECV <path>" / "SEND <path>,<mode>"
+    std::string syncUploaded();            // bytes received through sync SEND
     void dropConnection();                 // kill the active connection (device vanished)
     void goSilent();                       // device stops answering but the TCP link stays up
 
 private:
     void run();
     void serveConnection(int fd);
-    void shellSession(int fd);
-    void handleShellCommand(int fd, const std::string& cmd);
-    bool readLine(int fd, std::string* line);
+    void shellSession(int fd, std::string* rbuf);
+    void handleShellCommand(int fd, const std::string& cmd, std::string* rbuf);
+    void syncSession(int fd);
+    bool readLine(int fd, std::string* line, std::string* rbuf);
+    static bool readN(int fd, void* buf, size_t n);
     static void sendAll(int fd, const std::string& data);
+    static void sendSyncFrame(int fd, const char* id, const std::string& payload);
+    static void sendSyncHeader(int fd, const char* id, unsigned len);
 
     bool stock_ = false;
     bool wireless_ = false;
@@ -44,6 +53,8 @@ private:
     std::mutex mu_;
     std::vector<std::string> commands_;
     std::vector<std::string> transports_;
+    std::vector<std::string> sync_requests_;
+    std::string sync_uploaded_;
     std::string uploaded_;
-    std::string rbuf_;                     // connection read buffer
+    std::vector<int> open_fds_;            // for unblocking workers in the destructor
 };

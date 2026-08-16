@@ -9,8 +9,6 @@
 
 using namespace std;
 
-char inifilename[MAX_PATH] = "adbfsplugin.ini";  // Unused in this plugin, may be used to save data
-
 int PluginNumber;
 tProgressProc ProgressProc = NULL;
 tLogProc LogProc = NULL;
@@ -123,6 +121,36 @@ DCEXPORT BOOL DCPCALL FsMkDir(char* Path) {
     return FsMkDirW(awfilenamecopy(wbuf, Path));
 }
 
+// The Configure button in the commander's plugin settings: a Yes/No choice
+// between the two transfer modes, saved to the shared wfx.ini.
+static int ShowConfigDialog() {
+    wstring title = L"ADB Plugin Configuration";
+    wstring text = wstring(L"Transfer files with the fast ADB sync protocol (what adb pull/push uses)?\n\n") +
+        L"Yes = sync protocol: fast native transfers (default)\n" +
+        L"No = device shell: base64 transfers, slower, but with su they reach root-only files\n\n" +
+        L"Current mode: " + (GetTransferMode() == TRANSFER_SYNC ? L"sync protocol" : L"device shell");
+    const char* override_ = getenv("ADBFS_TRANSFER_MODE");
+    if (override_ && *override_) {
+        text += L"\n\nNote: the ADBFS_TRANSFER_MODE environment variable is set and overrides this setting.";
+    }
+    BOOL yes;
+    if (RequestProcW) {
+        WCHAR wtitle[wdirtypemax], wtext[wdirtypemax];
+        ws_to_u16buf(wtitle, countof(wtitle), title);
+        ws_to_u16buf(wtext, countof(wtext), text);
+        yes = RequestProcW(PluginNumber, RT_MsgYesNo, wtitle, wtext, NULL, 0);
+    } else if (RequestProc) {
+        char atitle[wdirtypemax], atext[wdirtypemax];
+        ws_to_utf8buf(atitle, sizeof(atitle), title);
+        ws_to_utf8buf(atext, sizeof(atext), text);
+        yes = RequestProc(PluginNumber, RT_MsgYesNo, atitle, atext, NULL, 0);
+    } else {
+        return FS_EXEC_ERROR;
+    }
+    SaveTransferMode(yes ? TRANSFER_SYNC : TRANSFER_SHELL);
+    return FS_EXEC_OK;
+}
+
 DCEXPORT int DCPCALL FsExecuteFileW(HWND MainWin, WCHAR* RemoteName, WCHAR* Verb) {
     // FS_EXEC_OK = "plugin handled it": the commander stays silent, versus
     // FS_EXEC_ERROR which pops a "Cannot open existing file" box
@@ -132,6 +160,13 @@ DCEXPORT int DCPCALL FsExecuteFileW(HWND MainWin, WCHAR* RemoteName, WCHAR* Verb
     // dir, open it with the default application, and clean the copy up itself
     if (u16_to_ws(Verb) == L"open") {
         return FS_EXEC_YOURSELF;
+    }
+    if (u16_to_ws(Verb) == L"properties") {
+        // Double Commander's Configure button targets the plugin root with
+        // the native path delimiter; Alt+Enter on files stays unhandled
+        wstring rn = u16_to_ws(RemoteName);
+        if (rn == L"/" || rn == L"\\")
+            return ShowConfigDialog();
     }
     return FS_EXEC_ERROR;
 }
@@ -169,6 +204,10 @@ DCEXPORT int DCPCALL FsGetFileW(WCHAR* RemoteName, WCHAR* LocalName, int CopyFla
     bool exists = (stat(local8.c_str(), &st) == 0);
     if (exists && (CopyFlags == 0 || CopyFlags == FS_COPYFLAGS_MOVE)) {
         return FS_FILE_EXISTS;
+    }
+    if (GetTransferMode() == TRANSFER_SYNC) {
+        int64_t fullsize = ((int64_t)ri->SizeHigh << 32) | ri->SizeLow;
+        return SyncPull(remote, local, fullsize);
     }
     FILE* f = fopen(local8.c_str(), "wb+");
     if (f == NULL) return FS_FILE_WRITEERROR;
@@ -238,6 +277,9 @@ DCEXPORT int DCPCALL FsPutFileW(WCHAR* LocalName, WCHAR* RemoteName, int CopyFla
         return FS_FILE_USERABORT;
     wstring local = u16_to_ws(LocalName);
     wstring remote = u16_to_ws(RemoteName);
+    if (GetTransferMode() == TRANSFER_SYNC) {
+        return SyncPush(local, remote);
+    }
     string local8 = ws_to_utf8(local);
     FILE* f = fopen(local8.c_str(), "rb");
     if (f == NULL) {
@@ -401,7 +443,7 @@ DCEXPORT int DCPCALL FsGetPreviewBitmapW(WCHAR* RemoteName, int width, int heigh
 }
 
 DCEXPORT void DCPCALL FsSetDefaultParams(FsDefaultParamStruct* dps) {
-    snprintf(inifilename, sizeof(inifilename), "%s", dps->DefaultIniName);
+    SetConfigIniPath(dps->DefaultIniName);
 }
 
 /**************************************************************************************/
